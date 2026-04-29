@@ -1,0 +1,246 @@
+/**
+ * Norwegian Bokmål strings — the default UI language.
+ * To add another language, create e.g. `en.ts` with the same shape and switch in `index.ts`.
+ */
+export const nb = {
+  appName: 'Kystvarsel',
+
+  tabs: {
+    spots: 'Steder',
+    alerts: 'Varsler',
+    settings: 'Innstillinger',
+  },
+
+  common: {
+    save: 'Lagre',
+    cancel: 'Avbryt',
+    delete: 'Slett',
+    edit: 'Rediger',
+    add: 'Legg til',
+    enabled: 'Aktivert',
+    disabled: 'Deaktivert',
+    none: 'Ingen',
+    noMin: 'Ingen min',
+    noMax: 'Ingen maks',
+    any: 'Alle',
+    yes: 'Ja',
+    no: 'Nei',
+    loading: 'Laster …',
+    retry: 'Prøv på nytt',
+    confirm: 'Bekreft',
+    back: 'Tilbake',
+  },
+
+  spots: {
+    title: 'Steder',
+    empty: 'Ingen steder ennå. Trykk + for å legge til.',
+    add: 'Legg til sted',
+    edit: 'Rediger sted',
+    delete: 'Slett sted',
+    deleteConfirm: 'Er du sikker på at du vil slette dette stedet? Tilhørende varsler slettes også.',
+    name: 'Navn',
+    latitude: 'Breddegrad',
+    longitude: 'Lengdegrad',
+    comment: 'Kommentar',
+    commentPlaceholder: 'F.eks. «Bra med lyr og sei»',
+    invalidCoordinates: 'Ugyldige koordinater. Bruk desimaltall, f.eks. 60.18, 5.02.',
+    open: 'Åpne værmelding',
+    pickOnMap: 'Velg på kart',
+    mapPickerHint: 'Trykk på kartet for å velge posisjon, eller dra markøren.',
+    mapPickerTitle: 'Velg posisjon',
+    viewList: 'Liste',
+    viewMap: 'Kart',
+    mapLegendMatching: 'Varsel matcher',
+    mapLegendAlert: 'Varsel aktivt',
+    mapLegendPlain: 'Ingen varsel',
+    mapCheckNow: 'Sjekk nå',
+    mapCheckRunning: 'Sjekker …',
+  },
+
+  forecast: {
+    title: 'Værmelding',
+    loading: 'Henter værmelding …',
+    empty: 'Ingen data ennå.',
+    error: 'Klarte ikke å hente værmelding.',
+    refresh: 'Oppdater',
+    viewList: 'Tabell',
+    viewChart: 'Graf',
+    columns: {
+      time: 'Tid',
+      airTemp: 'Luft',
+      wind: 'Vind',
+      precipitation: 'Nedbør',
+      seaTemp: 'Sjø',
+      wave: 'Bølger',
+      current: 'Strøm',
+      tide: 'Tidevann',
+    },
+    units: {
+      degC: '°C',
+      ms: 'm/s',
+      mm: 'mm',
+      m: 'm',
+      cm: 'cm',
+    },
+    tideRising: 'Stigende',
+    tideFalling: 'Fallende',
+    tideUnknown: 'Ukjent',
+    sources: {
+      weather: 'Vær: MET Norway (Locationforecast)',
+      ocean: 'Hav: MET Norway (Oceanforecast)',
+      tide: 'Tidevann: Kartverket / Se havnivå',
+    },
+    matchesAlert: 'Matcher varsel',
+    sourceMissing: 'Mangler data fra:',
+    cachedAt: 'Sist hentet:',
+  },
+
+  alerts: {
+    title: 'Varsler',
+    empty: 'Ingen varsler ennå. Lag et varsel for et sted.',
+    add: 'Lag varsel',
+    edit: 'Rediger varsel',
+    delete: 'Slett varsel',
+    deleteConfirm: 'Slette dette varselet?',
+    name: 'Navn',
+    message: 'Melding',
+    messagePlaceholder: 'F.eks. «Time for catching crabs!!!!»',
+    spot: 'Sted',
+    enabled: 'Aktivert',
+    timeWindow: 'Tidsvindu',
+    timeWindowFrom: 'Fra (HH:MM)',
+    timeWindowTo: 'Til (HH:MM)',
+    timeWindowOvernight: 'Overnatt-tidsvinduer er støttet (f.eks. 22:00–04:00).',
+
+    rainSection: 'Nedbør',
+    rainAny: 'Tillat all nedbør',
+    rainNone: 'Ingen nedbør',
+    rainMax: 'Maks nedbør (mm)',
+
+    windSection: 'Vind (m/s)',
+    currentSection: 'Strøm (m/s)',
+    seaTempSection: 'Sjøtemperatur (°C)',
+    waveSection: 'Bølgehøyde (m)',
+    tideSection: 'Tidevann',
+    tideLevelMin: 'Min nivå (cm)',
+    tideLevelMax: 'Maks nivå (cm)',
+    tideDirection: 'Retning',
+    tideDirAny: 'Alle',
+    tideDirRising: 'Stigende',
+    tideDirFalling: 'Fallende',
+
+    minLabel: 'Min',
+    maxLabel: 'Maks',
+
+    checkNow: 'Sjekk nå',
+    checkSummary: (matched: number, total: number) =>
+      `Sjekket ${total} varsler — ${matched} matcher.`,
+    notifTitle: (alertName: string) => `Kystvarsel: ${alertName}`,
+    notifBody: (msg: string, hourLabel: string) => `${msg}\nFørste match: ${hourLabel}`,
+
+    triggeredAt: 'Sist utløst:',
+    notTriggered: 'Aldri utløst.',
+    detail: {
+      title: 'Varseldetaljer',
+      criteriaSummary: 'Kriterier',
+      forecastTitle: 'Værmelding for stedet',
+      noMatches: 'Ingen timer matcher varselet i meldingsperioden.',
+      missingDataNote: 'Manglende data telles ikke som match.',
+    },
+
+    summary: {
+      wind: (min?: number, max?: number) => formatRange('Vind', min, max, 'm/s'),
+      current: (min?: number, max?: number) => formatRange('Strøm', min, max, 'm/s'),
+      seaTemp: (min?: number, max?: number) => formatRange('Sjø', min, max, '°C'),
+      tide: (min?: number, max?: number) => formatRange('Nivå', min, max, 'cm'),
+      wave: (min?: number, max?: number) => formatRange('Bølge', min, max, 'm'),
+    },
+  },
+
+  settings: {
+    title: 'Innstillinger',
+    about: 'Om appen',
+    aboutBody:
+      'Kystvarsel lagrer alle steder og varsler lokalt på telefonen din. Ingen brukerkonto, ingen sky.',
+    backgroundNote:
+      'Varsler sjekkes automatisk når telefonen tillater det. Åpne appen for å oppdatere manuelt.',
+    batteryNote:
+      'På Android kan batterisparing forsinke bakgrunnssjekk. Slå av batterioptimalisering for Kystvarsel hvis du vil ha mer pålitelige varsler.',
+    notificationPermission: 'Varseltillatelse',
+    notificationPermissionGranted: 'Tillatt',
+    notificationPermissionDenied: 'Avslått',
+    notificationPermissionUndetermined: 'Ikke spurt ennå',
+    requestNotificationPermission: 'Be om tillatelse',
+    runCheckNow: 'Sjekk varsler nå',
+    lastCheckLabel: 'Sist sjekket:',
+    lastCheckNever: 'Aldri',
+    sources: 'Datakilder',
+    metAttribution: 'Vær- og havdata levert av MET Norway under CC BY 4.0 / NLOD.',
+    kartverketAttribution: 'Tidevannsdata fra Kartverket / Se havnivå.',
+    version: 'Versjon',
+    reliabilityDisclaimer:
+      'Værvarsel er aldri 100 % nøyaktig. Bruk denne appen som beslutningsstøtte, ikke som eneste kilde til vurdering av sjø- og værforhold.',
+  },
+
+  charts: {
+    tempTitle: 'Temperatur',
+    airTemp: 'Luft',
+    seaTemp: 'Sjø',
+    windTitle: 'Vind',
+    precipitationTitle: 'Nedbør',
+    waveTitle: 'Bølger',
+    currentTitle: 'Strøm',
+    tideTitle: 'Tidevann',
+    arrowsHint: 'Piler viser bevegelsesretning. Sveip sidelengs for å se mer.',
+    scaleLabel: 'Vis',
+    scale1Day: '1 dag',
+    scale2Days: '2 dager',
+    scale3Days: '3 dager',
+  },
+
+  errors: {
+    startupFailed: 'Klarte ikke å starte appen',
+    network: 'Ingen internettforbindelse eller API utilgjengelig.',
+    invalid: 'Ugyldig verdi.',
+    saveFailed: 'Klarte ikke å lagre.',
+    deleteFailed: 'Klarte ikke å slette.',
+    fetchFailed: 'Klarte ikke å hente data.',
+    notificationDenied:
+      'Varseltillatelse ble avslått. Du kan slå den på i systeminnstillingene.',
+    backgroundUnavailable:
+      'Bakgrunnssjekk er ikke tilgjengelig på denne enheten. Bruk «Sjekk nå» manuelt.',
+  },
+
+  reasons: {
+    timeOfDay: 'Utenfor tidsvindu',
+    'precipitation:rain': 'Nedbør forventet',
+    'precipitation:tooMuch': 'For mye nedbør',
+    'precipitation:missing': 'Mangler nedbørsdata',
+    'wind:belowMin': 'For lite vind',
+    'wind:aboveMax': 'For mye vind',
+    'wind:missing': 'Mangler vinddata',
+    'current:belowMin': 'For svak strøm',
+    'current:aboveMax': 'For sterk strøm',
+    'current:missing': 'Mangler strømdata',
+    'seaTemp:belowMin': 'For kald sjø',
+    'seaTemp:aboveMax': 'For varm sjø',
+    'seaTemp:missing': 'Mangler sjøtemperaturdata',
+    'tide:belowMin': 'For lavt tidevann',
+    'tide:aboveMax': 'For høyt tidevann',
+    'tide:missing': 'Mangler tidevannsdata',
+    'wave:belowMin': 'For små bølger',
+    'wave:aboveMax': 'For høye bølger',
+    'wave:missing': 'Mangler bølgedata',
+    'tideDirection:wrong': 'Feil tidevannsretning',
+    'tideDirection:missing': 'Mangler tidevannsretning',
+  },
+} as const;
+
+function formatRange(label: string, min: number | undefined, max: number | undefined, unit: string): string {
+  if (min == null && max == null) return '';
+  if (min != null && max != null) return `${label} ${min}–${max} ${unit}`;
+  if (min != null) return `${label} ≥ ${min} ${unit}`;
+  return `${label} ≤ ${max} ${unit}`;
+}
+
+export type Strings = typeof nb;
