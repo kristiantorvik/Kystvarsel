@@ -8,12 +8,18 @@
     "newArchEnabled": true,
     "scheme": "kystvarsel",
     "icon": "./assets/icon.png",
-    "platforms": ["android", "ios"],
+    "platforms": [
+      "android",
+      "ios"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.example.kystvarsel",
       "infoPlist": {
-        "UIBackgroundModes": ["fetch", "processing"]
+        "UIBackgroundModes": [
+          "fetch",
+          "processing"
+        ]
       }
     },
     "android": {
@@ -42,7 +48,8 @@
           "useSQLCipher": false
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      "expo-sharing"
     ],
     "extra": {
       "metContactEmail": "kristiantorvik@gmail.com",

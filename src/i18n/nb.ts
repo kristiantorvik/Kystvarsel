@@ -161,6 +161,26 @@ export const nb = {
 
   settings: {
     title: 'Innstillinger',
+    dataSection: 'Data',
+    exportShare: 'Del fil',
+    exportSave: 'Lagre til Filer',
+    exportRunning: 'Eksporterer …',
+    exportFailed: 'Klarte ikke å eksportere.',
+    exportNothingToShare: 'Ingen data å eksportere ennå.',
+    importButton: 'Importer fra fil',
+    importRunning: 'Importerer …',
+    importPickCancelled: 'Ingen fil valgt.',
+    importInvalid: 'Ugyldig fil',
+    importInvalidBody: (detail: string) => `Filen ser ikke ut som en Kystvarsel-eksport.\n${detail}`,
+    importTooNew: 'Filen er fra en nyere appversjon. Oppdater appen og prøv igjen.',
+    importChooseTitle: 'Hvordan importere?',
+    importChooseBody: (spots: number, alerts: number) =>
+      `Filen inneholder ${spots} steder og ${alerts} varsler.`,
+    importReplaceAll: 'Erstatt alt',
+    importMerge: 'Slå sammen',
+    importDone: (s: number, a: number, sk: number) =>
+      `Importerte ${s} steder og ${a} varsler. ${sk > 0 ? `Hoppet over ${sk}.` : ''}`.trim(),
+    importFailed: 'Klarte ikke å importere.',
     about: 'Om appen',
     aboutBody:
       'Kystvarsel lagrer alle steder og varsler lokalt på telefonen din. Ingen brukerkonto, ingen sky.',
