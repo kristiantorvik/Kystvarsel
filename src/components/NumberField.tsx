@@ -48,6 +48,7 @@ export function NumberField({ label, value, onChange, placeholder, step = 'decim
         value={text}
         onChangeText={handleChange}
         placeholder={placeholder}
+        placeholderTextColor="#9AA3AC"
       />
     </View>
   );

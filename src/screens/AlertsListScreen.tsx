@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { alertsRepository } from '../data/alertsRepository';
 import { spotsRepository } from '../data/spotsRepository';
+import { buildAlertMatchMap } from '../data/alertStatus';
 import type { Alert, Spot } from '../domain/alertTypes';
 import { EmptyState } from '../components/EmptyState';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -18,12 +19,16 @@ export function AlertsListScreen() {
   const s = strings();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [spots, setSpots] = useState<Map<string, Spot>>(new Map());
+  const [matches, setMatches] = useState<Map<string, boolean>>(new Map());
   const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
     const [a, sp] = await Promise.all([alertsRepository.list(), spotsRepository.list()]);
     setAlerts(a);
     setSpots(new Map(sp.map((x) => [x.id, x])));
+    // Match status is derived from cached forecasts (no network), so it's
+    // cheap to recompute every time the screen gains focus.
+    setMatches(await buildAlertMatchMap(a));
     setLoaded(true);
   }, []);
 
@@ -58,18 +63,25 @@ export function AlertsListScreen() {
         renderItem={({ item }) => {
           const spot = spots.get(item.spotId);
           const summary = buildSummary(item);
+          const matching = matches.get(item.id) === true;
           return (
             <Pressable
-              style={styles.row}
+              style={[styles.row, matching ? styles.rowMatching : null]}
               onPress={() => nav.navigate('AlertDetail', { alertId: item.id })}
             >
               <View style={styles.headerRow}>
-                <Text style={styles.name}>{item.name}</Text>
+                <View style={styles.nameRow}>
+                  {matching && <View style={styles.matchDot} />}
+                  <Text style={styles.name}>{item.name}</Text>
+                </View>
                 <Switch value={item.enabled} onValueChange={() => onToggle(item)} />
               </View>
               <Text style={styles.spot}>{spot?.name ?? item.spotId}</Text>
               <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
               {summary ? <Text style={styles.summary}>{summary}</Text> : null}
+              {matching && (
+                <Text style={styles.matchLabel}>{s.alerts.matchingNow}</Text>
+              )}
             </Pressable>
           );
         }}
@@ -100,11 +112,35 @@ function buildSummary(alert: Alert): string {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  row: { paddingVertical: 12, paddingHorizontal: 16, borderBottomColor: '#EEE', borderBottomWidth: 1 },
+  row: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomColor: '#EEE',
+    borderBottomWidth: 1,
+    borderLeftWidth: 4,
+    borderLeftColor: 'transparent',
+  },
+  rowMatching: {
+    backgroundColor: '#F0F8F1',
+    borderLeftColor: '#2E7D32',
+  },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 },
+  matchDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#2E7D32',
+  },
   name: { fontSize: 16, fontWeight: '600', flex: 1 },
   spot: { fontSize: 12, color: '#666', marginTop: 2 },
   message: { fontSize: 13, color: '#444', marginTop: 4 },
   summary: { fontSize: 11, color: '#888', marginTop: 4 },
+  matchLabel: {
+    fontSize: 11,
+    color: '#2E7D32',
+    fontWeight: '600',
+    marginTop: 4,
+  },
   footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#EEE' },
 });

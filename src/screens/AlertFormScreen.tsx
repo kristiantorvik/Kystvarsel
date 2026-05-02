@@ -175,7 +175,10 @@ export function AlertFormScreen() {
         onPress: async () => {
           try {
             await alertsRepository.remove(existing.id);
-            nav.goBack();
+            // popTo skips the AlertDetail screen above us in the stack —
+            // returning there would just show a broken detail of a deleted
+            // alert. Land back on the list instead.
+            nav.popTo('AlertsList');
           } catch (e) {
             RNAlert.alert(s.errors.deleteFailed, e instanceof Error ? e.message : String(e));
           }

@@ -14,7 +14,7 @@
  * a `</script>` in user-supplied data can't break out.
  */
 
-export type LeafletLayer = 'sjokart' | 'topo';
+export type LeafletLayer = 'sjokart' | 'topo' | 'flyfoto';
 export type SpotStatus = 'plain' | 'alert' | 'matching';
 
 export interface SpotMarkerData {
@@ -112,8 +112,9 @@ const TEMPLATE = `<!DOCTYPE html>
 <body>
 <div id="map"></div>
 <div class="layer-toggle">
-  <button data-layer="sjokart">Sjøkart</button>
   <button data-layer="topo">Topo</button>
+  <button data-layer="sjokart">Sjøkart</button>
+  <button data-layer="flyfoto">Flyfoto</button>
 </div>
 __LEGEND__
 <script type="application/json" id="init-data">__INIT_DATA__</script>
@@ -143,6 +144,14 @@ __LEGEND__
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   var ATTR = '© <a href="https://www.kartverket.no/" target="_blank">Kartverket</a>';
+  // Aerial imagery: Norge i bilder (Kartverket's tilecache.norgeibilder.no)
+  // requires a session token bootstrapped via a private Norgeskart-only flow,
+  // and the older WMS at wms.geonorge.no/skwms1/wms.nib is auth-gated too.
+  // Until / unless a public token endpoint exists, we use Esri's World
+  // Imagery as a coverage fallback — globally free, no auth, in Web Mercator.
+  // Lower resolution than Norge i bilder (~30 cm – 1 m vs ~25 cm) but good
+  // enough for scouting shorelines and kelp areas at zoom 17–18.
+  var ATTR_ESRI = 'Tiles © <a href="https://www.esri.com/" target="_blank">Esri</a>, Maxar, Earthstar Geographics, GIS User Community';
   var layers = {
     sjokart: L.tileLayer(
       'https://cache.kartverket.no/v1/wmts/1.0.0/sjokartraster/default/webmercator/{z}/{y}/{x}.png',
@@ -151,6 +160,10 @@ __LEGEND__
     topo: L.tileLayer(
       'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png',
       { attribution: ATTR, maxZoom: 18 }
+    ),
+    flyfoto: L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution: ATTR_ESRI, maxZoom: 19 }
     )
   };
   var current = null;
@@ -171,7 +184,7 @@ __LEGEND__
       b.addEventListener('click', function() { setLayer(b.dataset.layer); });
     })(btns[i]);
   }
-  setLayer(INIT.defaultLayer || 'sjokart');
+  setLayer(INIT.defaultLayer || 'topo');
 
   if (INIT.mode === 'pick') {
     var marker = null;

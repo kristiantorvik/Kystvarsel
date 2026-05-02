@@ -102,7 +102,9 @@ export function SpotFormScreen() {
         onPress: async () => {
           try {
             await spotsRepository.remove(existing.id);
-            nav.goBack();
+            // Skip past SpotForecast (which would crash on the just-deleted
+            // spot) and land on the spots list directly.
+            nav.popTo('SpotsList');
           } catch (e) {
             RNAlert.alert(s.errors.deleteFailed, e instanceof Error ? e.message : String(e));
           }

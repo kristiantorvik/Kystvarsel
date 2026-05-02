@@ -133,6 +133,7 @@ export const nb = {
     maxLabel: 'Maks',
 
     checkNow: 'Sjekk nå',
+    matchingNow: 'Matcher nå',
     checkSummary: (matched: number, total: number) =>
       `Sjekket ${total} varsler — ${matched} matcher.`,
     notifTitle: (alertName: string) => `Kystvarsel: ${alertName}`,
@@ -146,6 +147,7 @@ export const nb = {
       forecastTitle: 'Værmelding for stedet',
       noMatches: 'Ingen timer matcher varselet i meldingsperioden.',
       missingDataNote: 'Manglende data telles ikke som match.',
+      jumpToFirstMatch: 'Hopp til første treff',
     },
 
     summary: {

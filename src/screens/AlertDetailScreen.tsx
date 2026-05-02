@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -67,6 +67,16 @@ export function AlertDetailScreen() {
     });
   }, [alert, nav, s.common.edit]);
 
+  // Hooks must run on every render — keep these above the early-return
+  // guards below. The values they produce are only meaningful once
+  // `evaluations` has been populated, but reading the empty initial state
+  // is harmless.
+  const firstMatchIndex = useMemo(
+    () => evaluations.findIndex((e) => e.matches),
+    [evaluations],
+  );
+  const listRef = useRef<FlatList<HourEvaluation>>(null);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -80,10 +90,23 @@ export function AlertDetailScreen() {
   if (!alert || !spot) return null;
 
   const matchingCount = evaluations.filter((e) => e.matches).length;
+  // Only worth showing the jump button if the first match isn't already on
+  // screen — at index 0 or 1 the user would see it without scrolling anyway.
+  const showJumpButton = firstMatchIndex > 1;
+
+  const jumpToFirstMatch = () => {
+    if (firstMatchIndex < 0) return;
+    listRef.current?.scrollToIndex({
+      index: firstMatchIndex,
+      animated: true,
+      viewPosition: 0, // align the matching row to the top of the visible area
+    });
+  };
 
   return (
     <View style={styles.container}>
       <FlatList
+        ref={listRef}
         data={evaluations}
         keyExtractor={(e) => e.hour.timeUtc}
         renderItem={({ item }) => (
@@ -93,6 +116,20 @@ export function AlertDetailScreen() {
             failedReasons={item.matches ? undefined : item.failedReasons}
           />
         )}
+        // Rows have variable height (extra "failed reasons" line on
+        // non-matching hours). When scrollToIndex can't measure the target
+        // ahead of time, fall back to a measured estimate then retry.
+        onScrollToIndexFailed={(info) => {
+          const offset = info.averageItemLength * info.index;
+          listRef.current?.scrollToOffset({ offset, animated: true });
+          setTimeout(() => {
+            listRef.current?.scrollToIndex({
+              index: info.index,
+              animated: true,
+              viewPosition: 0,
+            });
+          }, 80);
+        }}
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.spotName}>{spot.name}</Text>
@@ -111,6 +148,13 @@ export function AlertDetailScreen() {
                 : s.alerts.detail.noMatches}
             </Text>
             <Text style={styles.note}>{s.alerts.detail.missingDataNote}</Text>
+            {showJumpButton && (
+              <Pressable onPress={jumpToFirstMatch} style={styles.jumpButton}>
+                <Text style={styles.jumpButtonText}>
+                  ↓  {s.alerts.detail.jumpToFirstMatch}
+                </Text>
+              </Pressable>
+            )}
           </View>
         }
       />
@@ -128,4 +172,15 @@ const styles = StyleSheet.create({
   summaryHeader: { fontSize: 13, color: '#2E7D32', marginTop: 8, fontWeight: '600' },
   note: { fontSize: 11, color: '#888', marginTop: 4 },
   editBtn: { color: '#0E3A5F', fontWeight: '600', paddingHorizontal: 8 },
+  jumpButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#DCF1DE',
+    borderWidth: 1,
+    borderColor: '#2E7D32',
+  },
+  jumpButtonText: { color: '#1B5C20', fontSize: 13, fontWeight: '600' },
 });

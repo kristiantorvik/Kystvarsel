@@ -128,7 +128,7 @@ export function SpotsListScreen() {
         <View style={styles.mapWrap}>
           <MapWebView
             mode="spots"
-            defaultLayer="sjokart"
+            defaultLayer="topo"
             spots={markers}
             legendLabels={{
               matching: s.spots.mapLegendMatching,

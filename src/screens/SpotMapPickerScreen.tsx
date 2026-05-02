@@ -42,7 +42,7 @@ export function SpotMapPickerScreen() {
     <View style={styles.container}>
       <MapWebView
         mode="pick"
-        defaultLayer="sjokart"
+        defaultLayer="topo"
         initialLat={initialLat}
         initialLon={initialLon}
         picked={picked ?? undefined}

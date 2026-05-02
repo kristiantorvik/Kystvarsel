@@ -19,6 +19,7 @@ export function TextField({ label, value, onChange, placeholder, multiline, auto
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
+        placeholderTextColor="#9AA3AC"
         multiline={multiline}
         autoCapitalize={autoCapitalize}
       />
