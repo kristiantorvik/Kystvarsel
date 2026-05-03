@@ -34,6 +34,7 @@ export const nb = {
   spots: {
     title: 'Steder',
     empty: 'Ingen steder ennå. Trykk + for å legge til.',
+    emptyFiltered: 'Ingen steder matcher filtrene.',
     add: 'Legg til sted',
     edit: 'Rediger sted',
     delete: 'Slett sted',
@@ -50,11 +51,18 @@ export const nb = {
     mapPickerTitle: 'Velg posisjon',
     viewList: 'Liste',
     viewMap: 'Kart',
+    viewTags: 'Tagger',
+    viewLayers: 'Lag',
     mapLegendMatching: 'Varsel matcher',
     mapLegendAlert: 'Varsel aktivt',
     mapLegendPlain: 'Ingen varsel',
     mapCheckNow: 'Sjekk nå',
     mapCheckRunning: 'Sjekker …',
+    tagsSection: 'Tagger',
+    tagsSectionEmpty: 'Ingen tagger laget ennå. Bytt til Tagger-fanen for å legge til.',
+    filterAll: 'Alle',
+    filterUntagged: 'Uten tagg',
+    filterClearedHint: 'Velg én eller flere tagger for å filtrere.',
   },
 
   forecast: {
@@ -178,16 +186,20 @@ export const nb = {
       `Filen inneholder ${spots} steder og ${alerts} varsler.`,
     importReplaceAll: 'Erstatt alt',
     importMerge: 'Slå sammen',
-    importDone: (s: number, a: number, sk: number) =>
-      `Importerte ${s} steder og ${a} varsler. ${sk > 0 ? `Hoppet over ${sk}.` : ''}`.trim(),
+    importDone: (s: number, a: number, t: number, sk: number) =>
+      `Importerte ${s} steder, ${a} varsler og ${t} tagger. ${sk > 0 ? `Hoppet over ${sk}.` : ''}`.trim(),
     importFailed: 'Klarte ikke å importere.',
     about: 'Om appen',
     aboutBody:
       'Kystvarsel lagrer alle steder og varsler lokalt på telefonen din. Ingen brukerkonto, ingen sky.',
     backgroundNote:
-      'Varsler sjekkes automatisk når telefonen tillater det. Åpne appen for å oppdatere manuelt.',
+      'Varsler sjekkes automatisk én gang per døgn når telefonen tillater det. Åpne appen for å oppdatere manuelt.',
     batteryNote:
       'På Android kan batterisparing forsinke bakgrunnssjekk. Slå av batterioptimalisering for Kystvarsel hvis du vil ha mer pålitelige varsler.',
+    dailyCheckTitle: 'Tidspunkt for daglig sjekk',
+    dailyCheckBody:
+      'Velg på hvilken time Kystvarsel skal hente værvarsel og sende varsler. Sjekken kjøres maks én gang per døgn, så snart telefonen har anledning innen 30 minutter før eller når som helst etter dette tidspunktet.',
+    dailyCheckHour: 'Time (0–23)',
     notificationPermission: 'Varseltillatelse',
     notificationPermissionGranted: 'Tillatt',
     notificationPermissionDenied: 'Avslått',
@@ -202,6 +214,21 @@ export const nb = {
     version: 'Versjon',
     reliabilityDisclaimer:
       'Værvarsel er aldri 100 % nøyaktig. Bruk denne appen som beslutningsstøtte, ikke som eneste kilde til vurdering av sjø- og værforhold.',
+  },
+
+  tags: {
+    title: 'Tagger',
+    empty: 'Ingen tagger ennå. Trykk + for å lage en ny tagg.',
+    add: 'Ny tagg',
+    edit: 'Rediger tagg',
+    delete: 'Slett tagg',
+    deleteConfirm: 'Slette denne taggen? Den fjernes fra alle steder den er knyttet til.',
+    name: 'Navn',
+    namePlaceholder: 'F.eks. «Torsk»',
+    color: 'Farge',
+    spotCount: (n: number) => `${n} ${n === 1 ? 'sted' : 'steder'}`,
+    nameRequired: 'Navnet kan ikke være tomt.',
+    nameDuplicate: 'En tagg med dette navnet finnes allerede.',
   },
 
   layers: {

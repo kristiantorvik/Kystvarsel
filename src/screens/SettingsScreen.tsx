@@ -11,13 +11,20 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { PrimaryButton } from '../components/PrimaryButton';
+import { NumberField } from '../components/NumberField';
 import {
   getNotificationPermissionState,
   requestNotificationPermission,
   type PermissionState,
 } from '../notifications/localNotifications';
 import { runAlertCheck } from '../notifications/backgroundCheck';
-import { settingsRepository, SETTINGS_KEYS } from '../data/settingsRepository';
+import {
+  settingsRepository,
+  SETTINGS_KEYS,
+  getDailyCheckHour,
+  setDailyCheckHour,
+  DEFAULT_DAILY_CHECK_HOUR,
+} from '../data/settingsRepository';
 import {
   applyImport,
   buildExport,
@@ -35,10 +42,21 @@ export function SettingsScreen() {
   const [running, setRunning] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  // Daily-check hour, edited as a single integer field. `undefined` while
+  // the field is empty mid-edit; we only push to storage when the value
+  // parses to a valid in-range hour.
+  const [dailyHour, setDailyHour] = useState<number | undefined>(DEFAULT_DAILY_CHECK_HOUR);
 
   const refresh = useCallback(async () => {
     setPermission(await getNotificationPermissionState());
     setLastCheck(await settingsRepository.get(SETTINGS_KEYS.lastCheckAt));
+    setDailyHour(await getDailyCheckHour());
+  }, []);
+
+  const onDailyHourChange = useCallback(async (v: number | undefined) => {
+    setDailyHour(v);
+    if (v == null || !Number.isFinite(v) || v < 0 || v > 23) return;
+    await setDailyCheckHour(v);
   }, []);
 
   useFocusEffect(
@@ -65,7 +83,7 @@ export function SettingsScreen() {
   const onCheckNow = async () => {
     setRunning(true);
     try {
-      const r = await runAlertCheck();
+      const r = await runAlertCheck({ manual: true });
       RNAlert.alert(s.alerts.checkSummary(r.matched, r.checked));
       await refresh();
     } catch (e) {
@@ -184,10 +202,15 @@ export function SettingsScreen() {
     setImporting(true);
     try {
       const summary = await applyImport(payload, mode);
-      const skippedTotal = summary.spotsSkipped + summary.alertsSkipped;
+      const skippedTotal = summary.spotsSkipped + summary.alertsSkipped + summary.tagsSkipped;
       RNAlert.alert(
         s.settings.title,
-        s.settings.importDone(summary.spotsImported, summary.alertsImported, skippedTotal),
+        s.settings.importDone(
+          summary.spotsImported,
+          summary.alertsImported,
+          summary.tagsImported,
+          skippedTotal,
+        ),
       );
     } catch (e) {
       RNAlert.alert(s.settings.importFailed, e instanceof Error ? e.message : String(e));
@@ -209,6 +232,21 @@ export function SettingsScreen() {
       <Text style={styles.h2}>{s.alerts.checkNow}</Text>
       <Text style={styles.body}>{s.settings.backgroundNote}</Text>
       {Platform.OS === 'android' && <Text style={styles.body}>{s.settings.batteryNote}</Text>}
+
+      <Text style={styles.label}>{s.settings.dailyCheckTitle}</Text>
+      <Text style={styles.body}>{s.settings.dailyCheckBody}</Text>
+      <View style={styles.timeRow}>
+        <View style={styles.timeField}>
+          <NumberField
+            label={s.settings.dailyCheckHour}
+            value={dailyHour}
+            onChange={onDailyHourChange}
+            step="integer"
+            placeholder="0–23"
+          />
+        </View>
+      </View>
+
       <Text style={styles.meta}>
         {s.settings.lastCheckLabel} {lastCheck ? osloLabel(lastCheck) : s.settings.lastCheckNever}
       </Text>
@@ -278,4 +316,7 @@ const styles = StyleSheet.create({
   disclaimer: { fontSize: 13, color: '#7A5520', lineHeight: 18 },
   row: { flexDirection: 'row', gap: 8, marginTop: 4 },
   exportBtn: { flex: 1 },
+  label: { fontSize: 14, fontWeight: '600', color: '#0E3A5F', marginTop: 16, marginBottom: 4 },
+  timeRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  timeField: { flex: 1 },
 });

@@ -105,4 +105,26 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_layer_splats_layer ON layer_splats(layer_id);
     `);
   },
+
+  // Migration 2 — spot tags. Many-to-many between spots and tags.
+  // Cascade in both directions so deleting a spot or a tag cleans up the
+  // join table; the other side of the relation is left intact.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        color_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS spot_tags (
+        spot_id TEXT NOT NULL REFERENCES spots(id) ON DELETE CASCADE,
+        tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (spot_id, tag_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_spot_tags_tag ON spot_tags(tag_id);
+    `);
+  },
 ];

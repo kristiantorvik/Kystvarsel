@@ -3,9 +3,11 @@ import Constants from 'expo-constants';
 import { spotsRepository } from './spotsRepository';
 import { alertsRepository } from './alertsRepository';
 import { layersRepository } from './layersRepository';
+import { tagsRepository } from './tagsRepository';
 import { getDb } from './db';
 import type { Alert, Spot } from '../domain/alertTypes';
-import type { MapLayer, SerializedSplat } from '../domain/layerTypes';
+import type { SerializedSplat } from '../domain/layerTypes';
+import type { Tag } from '../domain/tagTypes';
 import { isColorId, type ColorId } from '../domain/palette';
 
 /**
@@ -17,8 +19,10 @@ import { isColorId, type ColorId } from '../domain/palette';
  *
  *   1 — spots + alerts (layers reserved as empty array)
  *   2 — Phase 4: layers populated with { meta, splats[] }
+ *   3 — Phase 1 follow-up: tags + spot attachments. v2 imports keep working
+ *       (the field is treated as optional during parse).
  */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /** Layer + its splats, as they appear in the export JSON. */
 export interface SerializedLayer {
@@ -32,6 +36,20 @@ export interface SerializedLayer {
   splats: SerializedSplat[];
 }
 
+/**
+ * Tag + the IDs of attached spots, as they appear in the export JSON.
+ * Embedding `spotIds` inline (vs a separate join array) keeps imports
+ * trivial: per tag, attach to whichever incoming spots resolved.
+ */
+export interface SerializedTag {
+  id: string;
+  name: string;
+  colorId: ColorId;
+  createdAt: string;
+  updatedAt: string;
+  spotIds: string[];
+}
+
 export interface ExportPayload {
   /** App version that produced the export, for diagnostics. */
   kystvarselVersion: string;
@@ -40,6 +58,7 @@ export interface ExportPayload {
   spots: Spot[];
   alerts: Alert[];
   layers: SerializedLayer[];
+  tags: SerializedTag[];
 }
 
 export type ImportMode = 'replace' | 'merge';
@@ -52,6 +71,10 @@ export interface ImportSummary {
   layersImported: number;
   layersSkipped: number;
   splatsImported: number;
+  tagsImported: number;
+  tagsSkipped: number;
+  /** Total spot-tag attachments that landed (excludes attachments referring to unknown spots). */
+  attachmentsImported: number;
 }
 
 export type ParseResult =
@@ -60,10 +83,11 @@ export type ParseResult =
 
 /** Read every user-owned table and assemble a portable JSON payload. */
 export async function buildExport(): Promise<ExportPayload> {
-  const [spots, alerts, layers] = await Promise.all([
+  const [spots, alerts, layers, tags] = await Promise.all([
     spotsRepository.list(),
     alertsRepository.list(),
     layersRepository.list(),
+    tagsRepository.list(),
   ]);
   // Pull splats per layer in parallel — typically a handful of layers, fast.
   const serializedLayers: SerializedLayer[] = await Promise.all(
@@ -82,6 +106,26 @@ export async function buildExport(): Promise<ExportPayload> {
       })),
     })),
   );
+  // Per-tag attachments: one indexed lookup off the previously-loaded spot
+  // ID list. Reading per-tag SELECTs would be N+1; the bulk lookup is
+  // already in the repo, so reuse it.
+  const tagIdsBySpot = await tagsRepository.listTagIdsForSpots(spots.map((s) => s.id));
+  const spotIdsByTag = new Map<string, string[]>();
+  for (const t of tags) spotIdsByTag.set(t.id, []);
+  for (const [spotId, tagIds] of tagIdsBySpot) {
+    for (const tagId of tagIds) {
+      const arr = spotIdsByTag.get(tagId);
+      if (arr) arr.push(spotId);
+    }
+  }
+  const serializedTags: SerializedTag[] = tags.map((t) => ({
+    id: t.id,
+    name: t.name,
+    colorId: t.colorId,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    spotIds: spotIdsByTag.get(t.id) ?? [],
+  }));
   return {
     kystvarselVersion: Constants.expoConfig?.version ?? '0.0.0',
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -89,6 +133,7 @@ export async function buildExport(): Promise<ExportPayload> {
     spots,
     alerts,
     layers: serializedLayers,
+    tags: serializedTags,
   };
 }
 
@@ -152,6 +197,16 @@ export function parseImport(text: string): ParseResult {
     if (v) cleanLayers.push(v);
   }
 
+  // Tags are optional — schema v1 and v2 imports won't have them.
+  const rawTags = Array.isArray((raw as { tags?: unknown }).tags)
+    ? (raw as { tags: unknown[] }).tags
+    : [];
+  const cleanTags: SerializedTag[] = [];
+  for (const t of rawTags) {
+    const v = coerceTag(t);
+    if (v) cleanTags.push(v);
+  }
+
   return {
     ok: true,
     payload: {
@@ -165,6 +220,7 @@ export function parseImport(text: string): ParseResult {
       spots: cleanSpots,
       alerts: cleanAlerts,
       layers: cleanLayers,
+      tags: cleanTags,
     },
   };
 }
@@ -193,6 +249,9 @@ export async function applyImport(
     layersImported: 0,
     layersSkipped: 0,
     splatsImported: 0,
+    tagsImported: 0,
+    tagsSkipped: 0,
+    attachmentsImported: 0,
   };
 
   const db = await getDb();
@@ -200,11 +259,14 @@ export async function applyImport(
     if (mode === 'replace') {
       // ON DELETE CASCADE on alerts.spot_id removes alerts automatically,
       // but we delete alerts explicitly first for clarity in case the
-      // foreign-key cascade is ever turned off. Same applies to layer_splats.
+      // foreign-key cascade is ever turned off. Same applies to layer_splats
+      // and spot_tags.
       await db.runAsync('DELETE FROM alerts');
+      await db.runAsync('DELETE FROM spot_tags');
       await db.runAsync('DELETE FROM spots');
       await db.runAsync('DELETE FROM layer_splats');
       await db.runAsync('DELETE FROM map_layers');
+      await db.runAsync('DELETE FROM tags');
     }
 
     const existingSpotIds = new Set<string>(
@@ -302,6 +364,51 @@ export async function applyImport(
         summary.splatsImported += 1;
       }
     }
+
+    // ----- tags + attachments -----
+    // Merge mode: skip incoming tags whose ID OR name already exists. Name
+    // collisions matter because the chip row keys on names — two tags with
+    // the same name would look indistinguishable. ID collisions matter for
+    // the join table primary key.
+    const existingTagIds = new Set<string>(
+      (await db.getAllAsync<{ id: string }>('SELECT id FROM tags')).map((r) => r.id),
+    );
+    const existingTagNames = new Set<string>(
+      (await db.getAllAsync<{ name: string }>('SELECT name FROM tags')).map((r) => r.name),
+    );
+
+    for (const tag of payload.tags) {
+      if (existingTagIds.has(tag.id) || existingTagNames.has(tag.name)) {
+        summary.tagsSkipped += 1;
+        continue;
+      }
+      await db.runAsync(
+        `INSERT INTO tags (id, name, color_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        tag.id,
+        tag.name,
+        tag.colorId,
+        tag.createdAt,
+        tag.updatedAt,
+      );
+      existingTagIds.add(tag.id);
+      existingTagNames.add(tag.name);
+      summary.tagsImported += 1;
+
+      // Attach to whichever incoming spots actually landed in the DB. For
+      // merge mode this naturally drops attachments to spots whose IDs the
+      // user already had (we can't safely re-attach across the spot ID
+      // gap). Acceptable trade-off for the simpler import semantics.
+      for (const spotId of tag.spotIds) {
+        if (!existingSpotIds.has(spotId)) continue;
+        await db.runAsync(
+          'INSERT OR IGNORE INTO spot_tags (spot_id, tag_id) VALUES (?, ?)',
+          spotId,
+          tag.id,
+        );
+        summary.attachmentsImported += 1;
+      }
+    }
   });
 
   return summary;
@@ -359,6 +466,32 @@ function coerceLayer(raw: unknown): SerializedLayer | null {
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : now,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : now,
     splats,
+  };
+}
+
+function coerceTag(raw: unknown): SerializedTag | null {
+  if (!isObject(raw)) return null;
+  const id = raw.id;
+  const name = raw.name;
+  const colorIdRaw = raw.colorId;
+  if (typeof id !== 'string' || !id) return null;
+  if (typeof name !== 'string' || !name.trim()) return null;
+  if (!isColorId(colorIdRaw)) return null;
+  const now = new Date().toISOString();
+  // spotIds is optional — we accept tags with no attachments (the user
+  // exported empty tags they hadn't applied yet).
+  const spotIdsRaw = Array.isArray(raw.spotIds) ? raw.spotIds : [];
+  const spotIds: string[] = [];
+  for (const s of spotIdsRaw) {
+    if (typeof s === 'string' && s) spotIds.push(s);
+  }
+  return {
+    id,
+    name: name.trim(),
+    colorId: colorIdRaw,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : now,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : now,
+    spotIds,
   };
 }
 
