@@ -81,4 +81,28 @@ const MIGRATIONS: Migration[] = [
       );
     `);
   },
+
+  // Migration 1 — Phase 4 painted map layers.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS map_layers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        color_id TEXT NOT NULL,
+        visible INTEGER NOT NULL DEFAULT 1,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS layer_splats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        layer_id TEXT NOT NULL REFERENCES map_layers(id) ON DELETE CASCADE,
+        lat REAL NOT NULL,
+        lon REAL NOT NULL,
+        radius_m REAL NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_layer_splats_layer ON layer_splats(layer_id);
+    `);
+  },
 ];

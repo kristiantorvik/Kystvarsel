@@ -1,17 +1,19 @@
 /**
  * Builds a self-contained HTML page that renders a Leaflet map with
- * Kartverket WMTS tiles (Sjøkart + Topo). Used inside a WebView.
+ * Kartverket WMTS tiles (Sjøkart + Topo) plus optional Esri aerial.
  *
- * Two modes:
- *   - 'pick'  — user taps to drop a single draggable pin; coords are posted
- *               back to RN via window.ReactNativeWebView.postMessage.
- *   - 'spots' — renders a circle marker per saved spot, colour-coded by
- *               status (plain / alert / matching). Tapping a marker posts a
- *               { type: 'spotTap', spotId } message back to RN.
+ * Three modes:
+ *   - 'pick'  — single draggable pin; coords posted back to RN.
+ *   - 'spots' — saved spots as colour-coded circle markers.
+ *   - 'paint' — edit one painted layer; tool toggle (navigate/paint/erase),
+ *               touch-driven splat painting, batched commit on touchend.
  *
- * The data is injected into a <script type="application/json"> block so it's
- * never parsed as JS — `<` chars in spot names are escaped to < so
- * a `</script>` in user-supplied data can't break out.
+ * In all three modes, a list of read-only painted layers can be passed in
+ * (`layers`) and they render under the spot markers / pick pin.
+ *
+ * Data is injected into a <script type="application/json"> block so it's
+ * never parsed as JS; `<` is escaped to `<` so a `</script>` inside
+ * user-supplied strings can't break out.
  */
 
 export type LeafletLayer = 'sjokart' | 'topo' | 'flyfoto';
@@ -25,16 +27,36 @@ export interface SpotMarkerData {
   status: SpotStatus;
 }
 
+/** Splat as understood by the WebView for rendering. */
+export interface PaintSplatData {
+  lat: number;
+  lon: number;
+  radiusM: number;
+}
+
+/** A painted layer rendered by the WebView. RN computes the hex from colorId. */
+export interface PaintLayerData {
+  id: string;
+  colorHex: string;
+  /** Layer-level alpha. 0..1; default 0.4 if omitted. */
+  opacity?: number;
+  visible: boolean;
+  splats: PaintSplatData[];
+}
+
+export type PaintTool = 'navigate' | 'paint' | 'erase';
+
 interface BaseOptions {
   defaultLayer?: LeafletLayer;
   initialLat?: number;
   initialLon?: number;
   initialZoom?: number;
+  /** Read-only painted layers shown beneath the rest of the UI. */
+  layers?: PaintLayerData[];
 }
 
 export interface PickOptions extends BaseOptions {
   mode: 'pick';
-  /** Initial pin position, e.g. when editing an existing spot. */
   picked?: { lat: number; lon: number };
 }
 
@@ -44,7 +66,19 @@ export interface SpotsOptions extends BaseOptions {
   legendLabels: { matching: string; alert: string; plain: string };
 }
 
-export type LeafletOptions = PickOptions | SpotsOptions;
+export interface PaintOptions extends BaseOptions {
+  mode: 'paint';
+  /** All visible layers, including the one being edited. */
+  layers: PaintLayerData[];
+  /** ID of the layer the user is editing. Always rendered, even if hidden. */
+  editingLayerId: string;
+  /** Active tool. Default 'navigate' to avoid accidental paint on entry. */
+  tool: PaintTool;
+  /** Brush size in CSS pixels — 15% of min(screen w, h). */
+  brushScreenPx: number;
+}
+
+export type LeafletOptions = PickOptions | SpotsOptions | PaintOptions;
 
 export function buildLeafletHtml(opts: LeafletOptions): string {
   const initJson = JSON.stringify(opts).replace(/</g, '\\u003c');
@@ -107,6 +141,12 @@ const TEMPLATE = `<!DOCTYPE html>
     box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
   }
   .leaflet-control-attribution { font-size: 9px; }
+  /* Layer canvases never capture pointer events — touches go to the map. */
+  .paint-layer-canvas { pointer-events: none; }
+  /* In paint mode, lift the bottom-right zoom control above the RN-side
+     edit toolbar so they don't overlap. The toolbar lives at bottom: 16
+     plus its own height (~50px); 90px clears it on every screen size. */
+  body.paint-mode .leaflet-bottom.leaflet-right { bottom: 90px; }
 </style>
 </head>
 <body>
@@ -143,14 +183,11 @@ __LEGEND__
   var map = L.map('map', { zoomControl: false }).setView(center, zoom);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
+  if (INIT.mode === 'paint') {
+    document.body.classList.add('paint-mode');
+  }
+
   var ATTR = '© <a href="https://www.kartverket.no/" target="_blank">Kartverket</a>';
-  // Aerial imagery: Norge i bilder (Kartverket's tilecache.norgeibilder.no)
-  // requires a session token bootstrapped via a private Norgeskart-only flow,
-  // and the older WMS at wms.geonorge.no/skwms1/wms.nib is auth-gated too.
-  // Until / unless a public token endpoint exists, we use Esri's World
-  // Imagery as a coverage fallback — globally free, no auth, in Web Mercator.
-  // Lower resolution than Norge i bilder (~30 cm – 1 m vs ~25 cm) but good
-  // enough for scouting shorelines and kelp areas at zoom 17–18.
   var ATTR_ESRI = 'Tiles © <a href="https://www.esri.com/" target="_blank">Esri</a>, Maxar, Earthstar Geographics, GIS User Community';
   var layers = {
     sjokart: L.tileLayer(
@@ -167,17 +204,34 @@ __LEGEND__
     )
   };
   var current = null;
+  var currentLayerName = null;
   function setLayer(name) {
-    var next = layers[name] || layers.sjokart;
+    var next = layers[name] || layers.topo;
     if (next === current) return;
     if (current) map.removeLayer(current);
     next.addTo(map);
     current = next;
+    currentLayerName = name;
     var btns = document.querySelectorAll('.layer-toggle button');
     for (var i = 0; i < btns.length; i++) {
       btns[i].classList.toggle('active', btns[i].dataset.layer === name);
     }
+    postMapState();
   }
+
+  // Push the user's view back to RN so the next screen that mounts a fresh
+  // WebView can open at the same place. RN keeps a module-level cache.
+  function postMapState() {
+    var c = map.getCenter();
+    post({
+      type: 'mapState',
+      lat: c.lat,
+      lon: c.lng,
+      zoom: map.getZoom(),
+      layer: currentLayerName,
+    });
+  }
+  map.on('moveend zoomend', postMapState);
   var btns = document.querySelectorAll('.layer-toggle button');
   for (var i = 0; i < btns.length; i++) {
     (function(b) {
@@ -185,6 +239,244 @@ __LEGEND__
     })(btns[i]);
   }
   setLayer(INIT.defaultLayer || 'topo');
+
+  // ============================================================
+  //  Painted-layer rendering (used by all three modes)
+  // ============================================================
+  // Each layer owns its own absolute-positioned <canvas>. Splats are drawn
+  // at full alpha into the canvas; the canvas itself is rendered at a
+  // single layer-level alpha so overlapping splats merge into one uniform
+  // colour ("paint twice doesn't darken" once committed).
+
+  // Render canvas extends beyond the viewport by this fraction in each
+  // direction. Pans within that budget show pre-rendered content (no blank
+  // reveal); we don't redraw mid-pan (that's Leaflet's vector renderer
+  // approach too — the overlayPane transform during a pan moves the canvas
+  // for free). Larger padding = more pan-budget but more canvas memory:
+  // total canvas pixels = (1 + 2p)^2 × viewport pixels. 0.4 = ~3.2× pixels.
+  var PAINT_LAYER_PADDING = 0.4;
+
+  function PaintLayer(data, isEditing) {
+    this._data = data;
+    this._editing = !!isEditing;
+    this._liveSplats = []; // in-progress drag, drawn but not yet committed
+    this._liveMode = 'paint'; // 'paint' or 'erase' — affects compositing
+    this._canvas = null;
+    // Geographic anchor + zoom captured at last full render. Used by
+    // _animateZoom to keep the canvas registered with tiles during pinch.
+    this._center = null;
+    this._zoom = null;
+    // L.Bounds (in layer coords) of the canvas's render area. Larger than
+    // the viewport thanks to padding.
+    this._bounds = null;
+  }
+  PaintLayer.prototype.onAdd = function(m) {
+    // Defensive: drop a stale canvas if onAdd is called twice without a
+    // matching onRemove (shouldn't happen in normal flow, but cheap to guard).
+    if (this._canvas && this._canvas.parentNode) {
+      this._canvas.parentNode.removeChild(this._canvas);
+      this._canvas = null;
+    }
+    this._map = m;
+    var c = document.createElement('canvas');
+    c.className = 'paint-layer-canvas';
+    c.style.position = 'absolute';
+    c.style.left = '0';
+    c.style.top = '0';
+    c.style.transformOrigin = '0 0'; // matches L.DomUtil.setTransform
+    m.getPanes().overlayPane.appendChild(c);
+    this._canvas = c;
+    // moveend (not move) — Leaflet transforms the overlayPane during a pan
+    // so the canvas already follows the map; we only need to repaint after
+    // the pan settles. For zoom we bind BOTH events because they cover
+    // different gestures:
+    //   - zoomanim → wheel/keyboard zoom (an animated transition)
+    //   - zoom    → pinch zoom (fires every frame during the pinch; the
+    //               map's _move(...,{pinch:true}) call emits 'zoom' but
+    //               not 'zoomanim'). Without this, pinch zoom leaves the
+    //               canvas frozen at the pre-pinch scale.
+    // L.GridLayer and L.Renderer both bind both for the same reason.
+    m.on('moveend zoomend resize', this._reset, this);
+    m.on('zoomanim', this._onAnimZoom, this);
+    m.on('zoom', this._onZoom, this);
+    this._reset();
+  };
+  PaintLayer.prototype.onRemove = function() {
+    if (this._map) {
+      this._map.off('moveend zoomend resize', this._reset, this);
+      this._map.off('zoomanim', this._onAnimZoom, this);
+      this._map.off('zoom', this._onZoom, this);
+    }
+    if (this._canvas && this._canvas.parentNode) {
+      this._canvas.parentNode.removeChild(this._canvas);
+    }
+    this._canvas = null;
+  };
+  /**
+   * Transform the canvas to keep its content registered with the tiles
+   * during a zoom in progress. Two entry points:
+   *   - _onAnimZoom: called by 'zoomanim' (wheel/keyboard); event payload
+   *     carries the *target* center + zoom mid-animation.
+   *   - _onZoom: called by 'zoom' (pinch); the map's current center + zoom
+   *     are already at the in-flight pinch state.
+   *
+   * Math copied from L.Renderer._updateTransform (the base for L.Canvas /
+   * L.SVG): uses _center + _zoom snapshotted at the last full render to
+   * compute where the canvas's already-drawn pixels need to land at the
+   * new zoom.
+   *
+   * Without this, the painted region appears frozen during pinch-zoom
+   * because the canvas's pixel content is calibrated to the old zoom.
+   */
+  PaintLayer.prototype._onAnimZoom = function(e) {
+    this._updateTransform(e.center, e.zoom);
+  };
+  PaintLayer.prototype._onZoom = function() {
+    if (!this._map) return;
+    this._updateTransform(this._map.getCenter(), this._map.getZoom());
+  };
+  PaintLayer.prototype._updateTransform = function(center, zoom) {
+    if (!this._map || !this._canvas || this._center == null || this._zoom == null) return;
+    var scale = this._map.getZoomScale(zoom, this._zoom);
+    // viewHalf must include the same padding the canvas was rendered with —
+    // it positions the canvas's TOP-LEFT, not the viewport's top-left.
+    var viewHalf = this._map.getSize().multiplyBy(0.5 + PAINT_LAYER_PADDING);
+    var currentCenterPoint = this._map.project(this._center, zoom);
+    var topLeftOffset = viewHalf
+      .multiplyBy(-scale)
+      .add(currentCenterPoint)
+      .subtract(this._map._getNewPixelOrigin(center, zoom));
+    L.DomUtil.setTransform(this._canvas, topLeftOffset, scale);
+  };
+  PaintLayer.prototype.setData = function(data) {
+    this._data = data;
+    // Drop any in-progress preview when canonical data updates. After undo
+    // (or any external state change) the preview must not linger — paint
+    // mode's destination-out preview would otherwise keep cutting holes
+    // out of just-restored splats.
+    this._liveSplats = [];
+    this._reset();
+  };
+  PaintLayer.prototype.setLive = function(liveSplats, mode) {
+    this._liveSplats = liveSplats || [];
+    if (mode === 'erase' || mode === 'paint') this._liveMode = mode;
+    this._reset();
+  };
+  PaintLayer.prototype._reset = function() {
+    if (!this._map || !this._canvas) return;
+    // Anchor for subsequent zoom animations — the next _animateZoom will
+    // compute its transform relative to this center + zoom.
+    this._center = this._map.getCenter();
+    this._zoom = this._map.getZoom();
+
+    // Padded bounds: the canvas covers viewport ± padding on each side.
+    var size = this._map.getSize();
+    var p = PAINT_LAYER_PADDING;
+    var min = this._map.containerPointToLayerPoint(size.multiplyBy(-p)).round();
+    var max = this._map.containerPointToLayerPoint(size.multiplyBy(1 + p)).round();
+    this._bounds = L.bounds(min, max);
+    var bSize = this._bounds.getSize();
+
+    // setPosition (modern Leaflet uses setTransform internally with no scale
+    // arg) clears any zoom-anim scale from the previous frame.
+    L.DomUtil.setPosition(this._canvas, this._bounds.min);
+    if (this._canvas.width !== bSize.x) this._canvas.width = bSize.x;
+    if (this._canvas.height !== bSize.y) this._canvas.height = bSize.y;
+    this._render();
+  };
+  PaintLayer.prototype._render = function() {
+    var ctx = this._canvas.getContext('2d');
+    var w = this._canvas.width;
+    var h = this._canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // The editing layer always renders, even if its visible flag is false —
+    // the user needs to see what they're working on.
+    if (!this._data.visible && !this._editing) {
+      this._canvas.style.opacity = 0;
+      return;
+    }
+    this._canvas.style.opacity = String(
+      this._data.opacity != null ? this._data.opacity : 0.4
+    );
+    ctx.fillStyle = this._data.colorHex;
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Viewport culling: skip splats whose disc doesn't touch the canvas at
+    // all. Painting tools never redraw what isn't visible — same trick.
+    // Now uses LAYER POINTS (subtracting bounds.min) instead of container
+    // points, because the canvas is bigger than the viewport — padding
+    // means container (0,0) lives at canvas (padding × size, padding × size)
+    // rather than (0, 0).
+    var zoom = this._map.getZoom();
+    var cullPad = 32;
+    var boundsMin = this._bounds.min;
+
+    var self = this;
+    function draw(s) {
+      var lp = self._map.latLngToLayerPoint([s.lat, s.lon]);
+      var x = lp.x - boundsMin.x;
+      var y = lp.y - boundsMin.y;
+      var r = s.radiusM / metersPerPxAt(s.lat, zoom);
+      if (r < 0.5) return;
+      // Cheap AABB test against the canvas extent.
+      if (x + r < -cullPad || x - r > w + cullPad) return;
+      if (y + r < -cullPad || y - r > h + cullPad) return;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Committed splats are always additive — fill the canvas mask normally.
+    var splats = this._data.splats || [];
+    for (var i = 0; i < splats.length; i++) draw(splats[i]);
+
+    // Live (mid-stroke) splats: paint adds, erase subtracts. Using
+    // destination-out for erase makes the preview visually accurate — the
+    // user sees the canvas being cleared as they drag, instead of a
+    // confusing same-colour trail.
+    if (this._liveSplats.length > 0) {
+      if (this._liveMode === 'erase') {
+        ctx.globalCompositeOperation = 'destination-out';
+      }
+      for (var j = 0; j < this._liveSplats.length; j++) draw(this._liveSplats[j]);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  };
+
+  function metersPerPxAt(lat, z) {
+    return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z);
+  }
+
+  // Active painted-layer instances, keyed by layer id.
+  var paintLayers = {};
+  function syncPaintLayers(layerList, editingId) {
+    var seen = {};
+    (layerList || []).forEach(function(data) {
+      seen[data.id] = true;
+      if (paintLayers[data.id]) {
+        paintLayers[data.id].setData(data);
+      } else {
+        var pl = new PaintLayer(data, data.id === editingId);
+        pl.onAdd(map);
+        paintLayers[data.id] = pl;
+      }
+    });
+    Object.keys(paintLayers).forEach(function(id) {
+      if (!seen[id]) {
+        paintLayers[id].onRemove();
+        delete paintLayers[id];
+      }
+    });
+  }
+
+  // ============================================================
+  //  Mode wiring
+  // ============================================================
+
+  if (INIT.layers && INIT.layers.length) {
+    syncPaintLayers(INIT.layers, INIT.mode === 'paint' ? INIT.editingLayerId : null);
+  }
 
   if (INIT.mode === 'pick') {
     var marker = null;
@@ -207,7 +499,6 @@ __LEGEND__
   } else if (INIT.mode === 'spots') {
     var COLOURS = { plain: '#888888', alert: '#3070C0', matching: '#2E7D32' };
     var spotMarkers = [];
-
     function addSpot(s) {
       var c = COLOURS[s.status] || COLOURS.plain;
       var m = L.circleMarker([s.lat, s.lon], {
@@ -218,17 +509,169 @@ __LEGEND__
       m.addTo(map);
       spotMarkers.push(m);
     }
-
     function renderSpots(list) {
-      for (var i = 0; i < spotMarkers.length; i++) {
-        map.removeLayer(spotMarkers[i]);
-      }
+      for (var i = 0; i < spotMarkers.length; i++) map.removeLayer(spotMarkers[i]);
       spotMarkers = [];
       (list || []).forEach(addSpot);
     }
     window.updateSpots = function(list) { renderSpots(list); };
     renderSpots(INIT.spots || []);
+  } else if (INIT.mode === 'paint') {
+    // ----- paint mode -----
+    var editingId = INIT.editingLayerId;
+    var brushScreenPx = INIT.brushScreenPx || 50;
+    var tool = INIT.tool || 'navigate';
+    var liveSplats = [];
+    var inStroke = false;
+    var lastSplat = null;
+    var DEDUP_FRACTION = 0.3;
+
+    function activeLayer() { return paintLayers[editingId]; }
+
+    function applyTool(t) {
+      tool = t;
+      if (tool === 'navigate') {
+        map.dragging.enable();
+        if (map.tap) map.tap.enable();
+      } else {
+        // Disable 1-finger pan; pinch zoom (touchZoom) stays on so users
+        // can still zoom during edits.
+        map.dragging.disable();
+        if (map.tap) map.tap.disable();
+      }
+    }
+    applyTool(tool);
+
+    function pointToLatLng(clientX, clientY) {
+      var rect = map.getContainer().getBoundingClientRect();
+      var x = clientX - rect.left;
+      var y = clientY - rect.top;
+      return map.containerPointToLatLng([x, y]);
+    }
+
+    function brushRadiusMAt(lat) {
+      return brushScreenPx * metersPerPxAt(lat, map.getZoom());
+    }
+
+    /**
+     * Add a touch sample to the in-progress stroke, interpolating between
+     * this point and the previous one so spacing is uniform regardless of
+     * finger speed. With dedup spacing at 30% of brush radius, a fast drag
+     * that would have left visible gaps now gets filled in; a slow drag
+     * still stays sparse because of the same threshold.
+     */
+    function addTouchSample(lat, lon) {
+      if (!lastSplat) {
+        liveSplats.push({ lat: lat, lon: lon, radiusM: brushRadiusMAt(lat) });
+        lastSplat = { lat: lat, lon: lon };
+        var pl0 = activeLayer();
+        if (pl0) pl0.setLive(liveSplats, tool);
+        return;
+      }
+      var pa = map.latLngToContainerPoint([lat, lon]);
+      var pb = map.latLngToContainerPoint([lastSplat.lat, lastSplat.lon]);
+      var dx = pa.x - pb.x, dy = pa.y - pb.y;
+      var dPx = Math.sqrt(dx * dx + dy * dy);
+      var stepPx = brushScreenPx * DEDUP_FRACTION;
+      if (dPx < stepPx) return; // too close — dedup
+      var steps = Math.max(1, Math.floor(dPx / stepPx));
+      for (var i = 1; i <= steps; i++) {
+        var t = i / steps;
+        var ix = pb.x + dx * t;
+        var iy = pb.y + dy * t;
+        var ll = map.containerPointToLatLng([ix, iy]);
+        liveSplats.push({
+          lat: ll.lat,
+          lon: ll.lng,
+          radiusM: brushRadiusMAt(ll.lat),
+        });
+      }
+      lastSplat = { lat: lat, lon: lon };
+      var pl = activeLayer();
+      if (pl) pl.setLive(liveSplats, tool);
+    }
+
+    function commitStroke() {
+      if (liveSplats.length === 0) return;
+      if (tool === 'paint') {
+        post({ type: 'paintBatch', layerId: editingId, splats: liveSplats });
+        // For paint we leave the preview in place. RN's reconciliation
+        // (persist + re-read + push back) takes a few ms; clearing here
+        // would briefly remove what the user just painted. The next
+        // touchstart resets liveSplats anyway.
+      } else if (tool === 'erase') {
+        post({ type: 'eraseBatch', layerId: editingId, erasers: liveSplats });
+        // Erase preview uses destination-out, so it's already drawn as
+        // "cut-outs". When RN sends fresh state without the erased splats,
+        // the preview's destination-out targets pixels that are already
+        // empty — no visible change. Leaving the preview is fine.
+      }
+      lastSplat = null;
+    }
+
+    function abortStroke() {
+      liveSplats = [];
+      lastSplat = null;
+      var pl = activeLayer();
+      if (pl) pl.setLive([], tool);
+    }
+
+    var container = map.getContainer();
+    container.addEventListener('touchstart', function(e) {
+      if (tool === 'navigate') return;
+      if (e.touches.length !== 1) {
+        if (inStroke) { inStroke = false; abortStroke(); }
+        return;
+      }
+      e.preventDefault();
+      // Fresh array per stroke so the previous stroke's preview gets dropped
+      // (important especially for the eraser, where the trail would otherwise
+      // linger until next pan/zoom).
+      liveSplats = [];
+      lastSplat = null;
+      inStroke = true;
+      var t = e.touches[0];
+      var ll = pointToLatLng(t.clientX, t.clientY);
+      addTouchSample(ll.lat, ll.lng);
+    }, { passive: false });
+
+    container.addEventListener('touchmove', function(e) {
+      if (!inStroke) return;
+      if (e.touches.length !== 1) {
+        // 2nd finger landed mid-stroke — abandon, let leaflet zoom.
+        inStroke = false;
+        abortStroke();
+        return;
+      }
+      e.preventDefault();
+      var t = e.touches[0];
+      var ll = pointToLatLng(t.clientX, t.clientY);
+      addTouchSample(ll.lat, ll.lng);
+    }, { passive: false });
+
+    container.addEventListener('touchend', function() {
+      if (!inStroke) return;
+      inStroke = false;
+      commitStroke();
+    });
+
+    container.addEventListener('touchcancel', function() {
+      if (!inStroke) return;
+      inStroke = false;
+      abortStroke();
+    });
+
+    // RN imperative API for paint mode — called via injectJavaScript.
+    window.setPaintTool = function(t) { applyTool(t); };
+    window.setPaintLayers = function(list) {
+      syncPaintLayers(list, editingId);
+    };
   }
+
+  // Universal hook for read-only updates of painted layers in any mode.
+  window.updatePaintLayers = function(list) {
+    syncPaintLayers(list, INIT.mode === 'paint' ? INIT.editingLayerId : null);
+  };
 })();
 </script>
 </body>

@@ -2,8 +2,11 @@ import Constants from 'expo-constants';
 
 import { spotsRepository } from './spotsRepository';
 import { alertsRepository } from './alertsRepository';
+import { layersRepository } from './layersRepository';
 import { getDb } from './db';
 import type { Alert, Spot } from '../domain/alertTypes';
+import type { MapLayer, SerializedSplat } from '../domain/layerTypes';
+import { isColorId, type ColorId } from '../domain/palette';
 
 /**
  * On-disk JSON schema for full app exports.
@@ -12,10 +15,22 @@ import type { Alert, Spot } from '../domain/alertTypes';
  * removed in a way that older code can't read. Additive changes (new optional
  * fields) don't require a bump — the parser ignores unknown fields.
  *
- *   1 — initial: spots + alerts + reserved layers slot
- *   (future) 2 — when Phase 4 layers ship with concrete shape
+ *   1 — spots + alerts (layers reserved as empty array)
+ *   2 — Phase 4: layers populated with { meta, splats[] }
  */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
+
+/** Layer + its splats, as they appear in the export JSON. */
+export interface SerializedLayer {
+  id: string;
+  name: string;
+  colorId: ColorId;
+  visible: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+  splats: SerializedSplat[];
+}
 
 export interface ExportPayload {
   /** App version that produced the export, for diagnostics. */
@@ -24,8 +39,7 @@ export interface ExportPayload {
   exportedAtUtc: string;
   spots: Spot[];
   alerts: Alert[];
-  /** Reserved for Phase 4 painted-region layers. Always [] in v0.1.0. */
-  layers: unknown[];
+  layers: SerializedLayer[];
 }
 
 export type ImportMode = 'replace' | 'merge';
@@ -35,8 +49,9 @@ export interface ImportSummary {
   spotsSkipped: number;
   alertsImported: number;
   alertsSkipped: number;
-  /** Always 0 in v0.1.0; populated once Phase 4 ships layers. */
   layersImported: number;
+  layersSkipped: number;
+  splatsImported: number;
 }
 
 export type ParseResult =
@@ -45,17 +60,35 @@ export type ParseResult =
 
 /** Read every user-owned table and assemble a portable JSON payload. */
 export async function buildExport(): Promise<ExportPayload> {
-  const [spots, alerts] = await Promise.all([
+  const [spots, alerts, layers] = await Promise.all([
     spotsRepository.list(),
     alertsRepository.list(),
+    layersRepository.list(),
   ]);
+  // Pull splats per layer in parallel — typically a handful of layers, fast.
+  const serializedLayers: SerializedLayer[] = await Promise.all(
+    layers.map(async (l) => ({
+      id: l.id,
+      name: l.name,
+      colorId: l.colorId,
+      visible: l.visible,
+      position: l.position,
+      createdAt: l.createdAt,
+      updatedAt: l.updatedAt,
+      splats: (await layersRepository.listSplats(l.id)).map((s) => ({
+        lat: s.lat,
+        lon: s.lon,
+        radiusM: s.radiusM,
+      })),
+    })),
+  );
   return {
     kystvarselVersion: Constants.expoConfig?.version ?? '0.0.0',
     schemaVersion: CURRENT_SCHEMA_VERSION,
     exportedAtUtc: new Date().toISOString(),
     spots,
     alerts,
-    layers: [],
+    layers: serializedLayers,
   };
 }
 
@@ -109,9 +142,15 @@ export function parseImport(text: string): ParseResult {
     if (v) cleanAlerts.push(v);
   }
 
-  const layers = Array.isArray((raw as { layers?: unknown }).layers)
+  // Layers are optional — schema v1 imports won't have them.
+  const rawLayers = Array.isArray((raw as { layers?: unknown }).layers)
     ? (raw as { layers: unknown[] }).layers
     : [];
+  const cleanLayers: SerializedLayer[] = [];
+  for (const l of rawLayers) {
+    const v = coerceLayer(l);
+    if (v) cleanLayers.push(v);
+  }
 
   return {
     ok: true,
@@ -125,7 +164,7 @@ export function parseImport(text: string): ParseResult {
         : new Date().toISOString(),
       spots: cleanSpots,
       alerts: cleanAlerts,
-      layers,
+      layers: cleanLayers,
     },
   };
 }
@@ -152,6 +191,8 @@ export async function applyImport(
     alertsImported: 0,
     alertsSkipped: 0,
     layersImported: 0,
+    layersSkipped: 0,
+    splatsImported: 0,
   };
 
   const db = await getDb();
@@ -159,9 +200,11 @@ export async function applyImport(
     if (mode === 'replace') {
       // ON DELETE CASCADE on alerts.spot_id removes alerts automatically,
       // but we delete alerts explicitly first for clarity in case the
-      // foreign-key cascade is ever turned off.
+      // foreign-key cascade is ever turned off. Same applies to layer_splats.
       await db.runAsync('DELETE FROM alerts');
       await db.runAsync('DELETE FROM spots');
+      await db.runAsync('DELETE FROM layer_splats');
+      await db.runAsync('DELETE FROM map_layers');
     }
 
     const existingSpotIds = new Set<string>(
@@ -224,6 +267,41 @@ export async function applyImport(
       existingAlertIds.add(alert.id);
       summary.alertsImported += 1;
     }
+
+    const existingLayerIds = new Set<string>(
+      (await db.getAllAsync<{ id: string }>('SELECT id FROM map_layers')).map((r) => r.id),
+    );
+
+    for (const layer of payload.layers) {
+      if (existingLayerIds.has(layer.id)) {
+        summary.layersSkipped += 1;
+        continue;
+      }
+      await db.runAsync(
+        `INSERT INTO map_layers (id, name, color_id, visible, position, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        layer.id,
+        layer.name,
+        layer.colorId,
+        layer.visible ? 1 : 0,
+        layer.position,
+        layer.createdAt,
+        layer.updatedAt,
+      );
+      existingLayerIds.add(layer.id);
+      summary.layersImported += 1;
+
+      for (const s of layer.splats) {
+        await db.runAsync(
+          'INSERT INTO layer_splats (layer_id, lat, lon, radius_m) VALUES (?, ?, ?, ?)',
+          layer.id,
+          s.lat,
+          s.lon,
+          s.radiusM,
+        );
+        summary.splatsImported += 1;
+      }
+    }
   });
 
   return summary;
@@ -255,6 +333,44 @@ function coerceSpot(raw: unknown): Spot | null {
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : now,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : now,
   };
+}
+
+function coerceLayer(raw: unknown): SerializedLayer | null {
+  if (!isObject(raw)) return null;
+  const id = raw.id;
+  const name = raw.name;
+  const colorIdRaw = raw.colorId;
+  if (typeof id !== 'string' || !id) return null;
+  if (typeof name !== 'string' || !name) return null;
+  if (!isColorId(colorIdRaw)) return null;
+  const now = new Date().toISOString();
+  const splatsRaw = Array.isArray(raw.splats) ? raw.splats : [];
+  const splats: SerializedSplat[] = [];
+  for (const s of splatsRaw) {
+    const v = coerceSplat(s);
+    if (v) splats.push(v);
+  }
+  return {
+    id,
+    name,
+    colorId: colorIdRaw,
+    visible: raw.visible !== false, // default visible
+    position: typeof raw.position === 'number' && isFinite(raw.position) ? raw.position : 0,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : now,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : now,
+    splats,
+  };
+}
+
+function coerceSplat(raw: unknown): SerializedSplat | null {
+  if (!isObject(raw)) return null;
+  const lat = raw.lat;
+  const lon = raw.lon;
+  const radiusM = raw.radiusM;
+  if (typeof lat !== 'number' || isNaN(lat) || lat < -90 || lat > 90) return null;
+  if (typeof lon !== 'number' || isNaN(lon) || lon < -180 || lon > 180) return null;
+  if (typeof radiusM !== 'number' || !isFinite(radiusM) || radiusM <= 0) return null;
+  return { lat, lon, radiusM };
 }
 
 function coerceAlert(raw: unknown): Alert | null {

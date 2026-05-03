@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { MapWebView } from '../components/maps/MapWebView';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { layersRepository } from '../data/layersRepository';
+import { paletteHex } from '../domain/palette';
 import { strings } from '../i18n';
 import { fmtCoord } from '../utils/format';
+import type { LeafletLayer, PaintLayerData } from '../components/maps/leafletHtml';
+import { rememberedMapState } from '../components/maps/mapState';
 import type { SpotsStackParamList } from '../navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<SpotsStackParamList, 'SpotMapPicker'>;
@@ -26,6 +30,33 @@ export function SpotMapPickerScreen() {
       : null,
   );
 
+  // Read painted layers once on mount — they're context for picking, not
+  // editable here, so we don't need to track changes.
+  const [paintLayers, setPaintLayers] = useState<PaintLayerData[]>([]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const all = await layersRepository.list();
+      const splatsByLayer = await layersRepository.listSplatsForLayers(
+        all.map((l) => l.id),
+      );
+      const data: PaintLayerData[] = all.map((l) => ({
+        id: l.id,
+        colorHex: paletteHex(l.colorId),
+        visible: l.visible,
+        splats: (splatsByLayer.get(l.id) ?? []).map((sp) => ({
+          lat: sp.lat,
+          lon: sp.lon,
+          radiusM: sp.radiusM,
+        })),
+      }));
+      if (active) setPaintLayers(data);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleConfirm = () => {
     if (!picked) return;
     // popTo (rather than navigate with merge:true) reliably pops back to the
@@ -42,10 +73,15 @@ export function SpotMapPickerScreen() {
     <View style={styles.container}>
       <MapWebView
         mode="pick"
-        defaultLayer="topo"
-        initialLat={initialLat}
-        initialLon={initialLon}
+        // Coords passed from SpotForm win (the user is intentionally
+        // editing this spot), otherwise drop in wherever the user was last
+        // looking on any other map screen.
+        defaultLayer={(rememberedMapState.get().layer as LeafletLayer | undefined) ?? 'topo'}
+        initialLat={initialLat ?? rememberedMapState.get().lat}
+        initialLon={initialLon ?? rememberedMapState.get().lon}
+        initialZoom={initialLat != null ? undefined : rememberedMapState.get().zoom}
         picked={picked ?? undefined}
+        layers={paintLayers}
         onPick={setPicked}
       />
 

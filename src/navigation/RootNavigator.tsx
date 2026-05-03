@@ -8,6 +8,9 @@ import { SpotsListScreen } from '../screens/SpotsListScreen';
 import { SpotFormScreen } from '../screens/SpotFormScreen';
 import { SpotForecastScreen } from '../screens/SpotForecastScreen';
 import { SpotMapPickerScreen } from '../screens/SpotMapPickerScreen';
+import { LayersListScreen } from '../screens/LayersListScreen';
+import { LayerFormScreen } from '../screens/LayerFormScreen';
+import { MapPaintScreen } from '../screens/MapPaintScreen';
 import { AlertsListScreen } from '../screens/AlertsListScreen';
 import { AlertFormScreen } from '../screens/AlertFormScreen';
 import { AlertDetailScreen } from '../screens/AlertDetailScreen';
@@ -19,6 +22,9 @@ export type SpotsStackParamList = {
   SpotForm: { spotId?: string; pickedLat?: number; pickedLon?: number };
   SpotForecast: { spotId: string };
   SpotMapPicker: { initialLat?: number; initialLon?: number };
+  LayersList: undefined;
+  LayerForm: { layerId?: string };
+  MapPaint: { layerId: string };
 };
 
 export type AlertsStackParamList = {
@@ -50,6 +56,9 @@ function SpotsStackNav() {
       <SpotsStack.Screen name="SpotForm" component={SpotFormScreen} options={{ title: s.spots.add }} />
       <SpotsStack.Screen name="SpotForecast" component={SpotForecastScreen} options={{ title: s.forecast.title }} />
       <SpotsStack.Screen name="SpotMapPicker" component={SpotMapPickerScreen} options={{ title: s.spots.mapPickerTitle }} />
+      <SpotsStack.Screen name="LayersList" component={LayersListScreen} options={{ title: s.layers.title }} />
+      <SpotsStack.Screen name="LayerForm" component={LayerFormScreen} options={{ title: s.layers.add }} />
+      <SpotsStack.Screen name="MapPaint" component={MapPaintScreen} options={{ title: s.layers.paintTitle }} />
     </SpotsStack.Navigator>
   );
 }

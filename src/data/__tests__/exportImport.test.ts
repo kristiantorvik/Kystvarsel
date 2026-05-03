@@ -113,4 +113,116 @@ describe('parseImport', () => {
     expect(r2.ok).toBe(true);
     if (r2.ok) expect(r2.payload.layers).toEqual([]);
   });
+
+  test('schema v1 imports cleanly into v2 reader (forward compat)', () => {
+    const r = parseImport(
+      JSON.stringify({
+        schemaVersion: 1,
+        spots: [{ id: 's1', name: 'X', latitude: 60, longitude: 5 }],
+        alerts: [],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.layers).toEqual([]);
+      expect(r.payload.spots.length).toBe(1);
+    }
+  });
+
+  test('valid layer with splats parses', () => {
+    const r = parseImport(
+      JSON.stringify({
+        schemaVersion: 2,
+        spots: [],
+        alerts: [],
+        layers: [
+          {
+            id: 'l1',
+            name: 'Skjell',
+            colorId: 'c4',
+            visible: true,
+            position: 0,
+            splats: [
+              { lat: 60.18, lon: 5.02, radiusM: 30 },
+              { lat: 60.19, lon: 5.03, radiusM: 25 },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.layers.length).toBe(1);
+      const l = r.payload.layers[0];
+      expect(l.id).toBe('l1');
+      expect(l.colorId).toBe('c4');
+      expect(l.splats.length).toBe(2);
+      expect(l.splats[0].radiusM).toBe(30);
+    }
+  });
+
+  test('layer with unknown colorId is dropped', () => {
+    const r = parseImport(
+      JSON.stringify({
+        schemaVersion: 2,
+        spots: [],
+        alerts: [],
+        layers: [
+          { id: 'l1', name: 'X', colorId: 'magenta', visible: true, position: 0, splats: [] },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.payload.layers.length).toBe(0);
+  });
+
+  test('bad splats inside a valid layer are filtered, layer kept', () => {
+    const r = parseImport(
+      JSON.stringify({
+        schemaVersion: 2,
+        spots: [],
+        alerts: [],
+        layers: [
+          {
+            id: 'l1',
+            name: 'X',
+            colorId: 'c1',
+            visible: true,
+            position: 0,
+            splats: [
+              { lat: 60, lon: 5, radiusM: 10 },     // good
+              { lat: 60, lon: 5 },                   // missing radius — dropped
+              { lat: 99, lon: 5, radiusM: 10 },     // out-of-range lat — dropped
+              { lat: 60, lon: 5, radiusM: -1 },     // negative radius — dropped
+              { lat: 60, lon: 5, radiusM: 0 },      // zero radius — dropped
+            ],
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.layers.length).toBe(1);
+      expect(r.payload.layers[0].splats.length).toBe(1);
+    }
+  });
+
+  test('layer visibility round-trips, defaulting to true if missing', () => {
+    const r = parseImport(
+      JSON.stringify({
+        schemaVersion: 2,
+        spots: [],
+        alerts: [],
+        layers: [
+          { id: 'l1', name: 'A', colorId: 'c1', visible: false, position: 0, splats: [] },
+          { id: 'l2', name: 'B', colorId: 'c2', position: 1, splats: [] }, // no `visible`
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.layers[0].visible).toBe(false);
+      expect(r.payload.layers[1].visible).toBe(true);
+    }
+  });
 });
