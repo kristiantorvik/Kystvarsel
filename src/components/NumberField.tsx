@@ -49,6 +49,7 @@ export function NumberField({ label, value, onChange, placeholder, step = 'decim
         onChangeText={handleChange}
         placeholder={placeholder}
         placeholderTextColor="#9AA3AC"
+        underlineColorAndroid="transparent"
       />
     </View>
   );
@@ -65,5 +66,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 15,
     backgroundColor: '#fff',
+    // Explicit text colour so dark-mode systems don't paint white on white.
+    color: '#222',
   },
 });

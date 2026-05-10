@@ -272,13 +272,19 @@ export function SettingsScreen() {
           variant="secondary"
           style={styles.exportBtn}
         />
-        <PrimaryButton
-          title={exporting ? s.settings.exportRunning : s.settings.exportSave}
-          onPress={onExportSave}
-          loading={exporting}
-          variant="secondary"
-          style={styles.exportBtn}
-        />
+        {/* "Lagre til Filer" relies on Android's Storage Access Framework
+            (FileSystem.StorageAccessFramework). On iOS this API is absent
+            and would crash; iOS users save to Files via the share sheet
+            already exposed by "Del fil". */}
+        {Platform.OS === 'android' && (
+          <PrimaryButton
+            title={exporting ? s.settings.exportRunning : s.settings.exportSave}
+            onPress={onExportSave}
+            loading={exporting}
+            variant="secondary"
+            style={styles.exportBtn}
+          />
+        )}
       </View>
       <PrimaryButton
         title={importing ? s.settings.importRunning : s.settings.importButton}

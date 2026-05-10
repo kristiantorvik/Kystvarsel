@@ -4,24 +4,44 @@ import type { HourlyForecast } from '../domain/forecastTypes';
 import { fmtCompass, fmtNum } from '../utils/format';
 import { osloLabel } from '../utils/time';
 import { strings } from '../i18n';
+import { WeatherIcon } from './WeatherIcon';
 
 interface Props {
   hour: HourlyForecast;
   matchesAlert?: boolean;
   failedReasons?: string[];
+  /**
+   * True when this row's hour bucket contains "now" — used to draw the
+   * blue accent strip so the user can find the current hour at a glance.
+   * Set by the screen, not by ForecastRow itself, so the same component
+   * is reusable inside an alert detail view (which has no "now" semantics).
+   */
+  isNow?: boolean;
 }
 
-export function ForecastRow({ hour, matchesAlert, failedReasons }: Props) {
+export function ForecastRow({ hour, matchesAlert, failedReasons, isNow }: Props) {
   const s = strings();
   const tideArrow =
     hour.tideDirection === 'rising' ? '↑' :
     hour.tideDirection === 'falling' ? '↓' : '·';
 
   return (
-    <View style={[styles.card, matchesAlert ? styles.match : null]}>
+    <View
+      style={[
+        styles.card,
+        matchesAlert ? styles.match : null,
+        // The "now" highlight is intentionally a left accent strip rather
+        // than a full background tint — it stays visible even when a row
+        // also matches an alert (which already paints the background green).
+        isNow ? styles.now : null,
+      ]}
+    >
       <View style={styles.headerRow}>
-        <Text style={styles.time}>{osloLabel(hour.timeUtc)}</Text>
-        {hour.weatherSymbol && <Text style={styles.symbol}>{hour.weatherSymbol}</Text>}
+        <View style={styles.timeWrap}>
+          {isNow && <Text style={styles.nowBadge}>{s.forecast.now}</Text>}
+          <Text style={styles.time}>{osloLabel(hour.timeUtc)}</Text>
+        </View>
+        <WeatherIcon code={hour.weatherSymbol} size={32} />
         {matchesAlert && <Text style={styles.matchBadge}>{s.forecast.matchesAlert}</Text>}
       </View>
 
@@ -93,13 +113,28 @@ const styles = StyleSheet.create({
     borderColor: '#2E7D32',
     borderWidth: 1,
   },
+  now: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#0E3A5F',
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  timeWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   time: { fontSize: 14, fontWeight: '600', color: '#0E3A5F' },
+  nowBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    backgroundColor: '#0E3A5F',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
   symbol: { fontSize: 12, color: '#666' },
   matchBadge: {
     fontSize: 11,

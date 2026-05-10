@@ -2,28 +2,36 @@
   "expo": {
     "name": "Kystvarsel",
     "slug": "kystvarsel",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "scheme": "kystvarsel",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E3A5F"
+    },
     "platforms": [
       "android",
       "ios"
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.example.kystvarsel",
+      "bundleIdentifier": "no.kystvarsel.app",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch",
           "processing"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "kystvarsel.alert-check"
         ]
       }
     },
     "android": {
-      "package": "com.example.kystvarsel",
+      "package": "no.kystvarsel.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0E3A5F"
@@ -49,10 +57,19 @@
         }
       ],
       "expo-background-task",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 280,
+          "resizeMode": "contain",
+          "backgroundColor": "#0E3A5F"
+        }
+      ]
     ],
     "extra": {
-      "metContactEmail": "kristiantorvik@gmail.com",
+      "metContactEmail": "kystvarsel.app@gmail.com",
       "appIdentifier": "kystvarsel"
     }
   }

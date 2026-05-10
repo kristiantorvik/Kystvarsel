@@ -40,7 +40,7 @@ The TypeScript clients in `src/api/` mirror the Python reference logic with one 
 
 MET Norway requires a meaningful `User-Agent` identifying the app and a contact email.
 
-The contact email lives in `app.json` under `expo.extra.metContactEmail`. The default is `kristiantorvik@gmail.com`. The `User-Agent` is computed at runtime as:
+The contact email lives in `app.json` under `expo.extra.metContactEmail`. The default is `kystvarsel.app@gmail.com`. The `User-Agent` is computed at runtime as:
 
 ```
 <appIdentifier>/<version> <metContactEmail>

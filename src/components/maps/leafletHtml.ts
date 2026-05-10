@@ -1,3 +1,5 @@
+import { LEAFLET_CSS, LEAFLET_JS } from './leafletAssets.generated';
+
 /**
  * Builds a self-contained HTML page that renders a Leaflet map with
  * Kartverket WMTS tiles (Sjøkart + Topo) plus optional Esri aerial.
@@ -16,7 +18,7 @@
  * user-supplied strings can't break out.
  */
 
-export type LeafletLayer = 'sjokart' | 'topo' | 'flyfoto';
+export type LeafletLayer = 'sjokart' | 'topo' | 'gratone' | 'flyfoto';
 export type SpotStatus = 'plain' | 'alert' | 'matching';
 
 export interface SpotMarkerData {
@@ -84,9 +86,18 @@ export function buildLeafletHtml(opts: LeafletOptions): string {
   const initJson = JSON.stringify(opts).replace(/</g, '\\u003c');
   const legendHtml =
     opts.mode === 'spots' ? buildLegend(opts.legendLabels) : '';
+  // Leaflet's CSS/JS are inlined from the generated assets module rather
+  // than fetched from a CDN — keeps the WebView self-contained, removes
+  // a runtime dependency on unpkg.com, and ensures the map works offline.
+  //
+  // Function replacers (vs raw strings) avoid JavaScript's `$&` / `$1`
+  // backreference interpretation in `String.replace`'s second argument,
+  // which would otherwise mangle Leaflet's regex literals.
   return TEMPLATE
-    .replace('__INIT_DATA__', initJson)
-    .replace('__LEGEND__', legendHtml);
+    .replace('__LEAFLET_CSS__', () => LEAFLET_CSS)
+    .replace('__LEAFLET_JS__', () => LEAFLET_JS)
+    .replace('__INIT_DATA__', () => initJson)
+    .replace('__LEGEND__', () => legendHtml);
 }
 
 function buildLegend(labels: { matching: string; alert: string; plain: string }): string {
@@ -112,8 +123,8 @@ const TEMPLATE = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style id="leaflet-css">__LEAFLET_CSS__</style>
+<script>__LEAFLET_JS__</script>
 <style>
   html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #E8ECF0; }
@@ -147,6 +158,24 @@ const TEMPLATE = `<!DOCTYPE html>
      edit toolbar so they don't overlap. The toolbar lives at bottom: 16
      plus its own height (~50px); 90px clears it on every screen size. */
   body.paint-mode .leaflet-bottom.leaflet-right { bottom: 90px; }
+
+  /* Flyfoto explainer popup. Shown when the user taps the "Flyfoto"
+     button — aerial imagery is not bundled in v1 (waiting on Kartverket's
+     Norge i bilder access). The popup is a polite "coming soon" rather
+     than silently disabling the button so users know it's planned. */
+  .flyfoto-info {
+    position: absolute; left: 12px; right: 12px; top: 60px; z-index: 1100;
+    background: #fff; border-radius: 8px; padding: 14px 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+    font-size: 13px; line-height: 1.4; color: #333;
+    display: none;
+  }
+  .flyfoto-info.show { display: block; }
+  .flyfoto-info h4 { margin: 0 0 6px 0; font-size: 14px; color: #0E3A5F; }
+  .flyfoto-info button {
+    margin-top: 10px; border: none; background: #0E3A5F; color: #fff;
+    padding: 8px 14px; border-radius: 6px; font-weight: 600; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -154,7 +183,13 @@ const TEMPLATE = `<!DOCTYPE html>
 <div class="layer-toggle">
   <button data-layer="topo">Topo</button>
   <button data-layer="sjokart">Sjøkart</button>
+  <button data-layer="gratone">Gråtone</button>
   <button data-layer="flyfoto">Flyfoto</button>
+</div>
+<div class="flyfoto-info" id="flyfoto-info">
+  <h4>Flyfoto kommer snart</h4>
+  <p style="margin:0;">Vi jobber med å gjøre Kartverkets «Norge i bilder» tilgjengelig direkte i appen. Det er ikke klart i denne versjonen, men kommer i en oppdatering.</p>
+  <button id="flyfoto-info-close">OK</button>
 </div>
 __LEGEND__
 <script type="application/json" id="init-data">__INIT_DATA__</script>
@@ -188,7 +223,19 @@ __LEGEND__
   }
 
   var ATTR = '© <a href="https://www.kartverket.no/" target="_blank">Kartverket</a>';
-  var ATTR_ESRI = 'Tiles © <a href="https://www.esri.com/" target="_blank">Esri</a>, Maxar, Earthstar Geographics, GIS User Community';
+  // Aerial photo intentionally not wired up in v1. Esri World Imagery is
+  // not licensed for commercial use without a paid plan; Kartverket's
+  // Norge i bilder requires a paid agreement (in progress). Tapping the
+  // Flyfoto button surfaces an explainer modal instead of switching layers.
+  //
+  // Note on a previously-attempted "Nautisk bakgrunnskart" combo: the
+  // visually-rich nautical layer on Norgeskart.no is served by Electronic
+  // Chart Centre AS (tile.ecc.no / pmtiles.ecc.no), a commercial vendor
+  // Kartverket has a paid agreement with — same parent organization that
+  // distributes ENC charts via PRIMAR. Reproducing that look from
+  // Kartverket's free dybdedata2 WMS doesn't match visually, and using
+  // Norgeskart's API key would be unauthorized use of ECC's service.
+  // Skipping until a Kartverket/ECC license is in place.
   var layers = {
     sjokart: L.tileLayer(
       'https://cache.kartverket.no/v1/wmts/1.0.0/sjokartraster/default/webmercator/{z}/{y}/{x}.png',
@@ -198,10 +245,10 @@ __LEGEND__
       'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png',
       { attribution: ATTR, maxZoom: 18 }
     ),
-    flyfoto: L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      { attribution: ATTR_ESRI, maxZoom: 19 }
-    )
+    gratone: L.tileLayer(
+      'https://cache.kartverket.no/v1/wmts/1.0.0/topograatone/default/webmercator/{z}/{y}/{x}.png',
+      { attribution: ATTR, maxZoom: 18 }
+    ),
   };
   var current = null;
   var currentLayerName = null;
@@ -232,13 +279,35 @@ __LEGEND__
     });
   }
   map.on('moveend zoomend', postMapState);
+  // Flyfoto button intercepts to show the "coming soon" explainer instead
+  // of switching layers. All other buttons fall through to setLayer.
+  var infoEl = document.getElementById('flyfoto-info');
+  var infoCloseEl = document.getElementById('flyfoto-info-close');
+  if (infoCloseEl) {
+    infoCloseEl.addEventListener('click', function() {
+      if (infoEl) infoEl.classList.remove('show');
+    });
+  }
   var btns = document.querySelectorAll('.layer-toggle button');
   for (var i = 0; i < btns.length; i++) {
     (function(b) {
-      b.addEventListener('click', function() { setLayer(b.dataset.layer); });
+      b.addEventListener('click', function() {
+        if (b.dataset.layer === 'flyfoto') {
+          if (infoEl) infoEl.classList.add('show');
+          return;
+        }
+        setLayer(b.dataset.layer);
+      });
     })(btns[i]);
   }
-  setLayer(INIT.defaultLayer || 'topo');
+  // Coerce any saved unsupported default to topo so users land on a
+  // working layer instead of nothing. Includes 'flyfoto' (deferred until
+  // a paid aerial license lands) and 'nautisk' (briefly added then
+  // removed when we discovered it required ECC licensing).
+  var initialLayer = (INIT.defaultLayer === 'flyfoto' || INIT.defaultLayer === 'nautisk')
+    ? 'topo'
+    : (INIT.defaultLayer || 'topo');
+  setLayer(initialLayer);
 
   // ============================================================
   //  Painted-layer rendering (used by all three modes)

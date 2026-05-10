@@ -101,6 +101,55 @@ export const nb = {
     matchesAlert: 'Matcher varsel',
     sourceMissing: 'Mangler data fra:',
     cachedAt: 'Sist hentet:',
+    now: 'Nå',
+    refreshing: 'Henter ferskt værvarsel …',
+    cachedRelative: (minutes: number) => {
+      if (minutes < 1) return 'akkurat nå';
+      if (minutes === 1) return '1 minutt siden';
+      if (minutes < 60) return `${minutes} minutter siden`;
+      const h = Math.floor(minutes / 60);
+      if (h === 1) return '1 time siden';
+      if (h < 24) return `${h} timer siden`;
+      const d = Math.floor(h / 24);
+      return d === 1 ? '1 døgn siden' : `${d} døgn siden`;
+    },
+    /**
+     * Bokmål labels for MET weather symbol codes. Used as accessibility
+     * labels on the icon images and as a fallback if we ever want to
+     * show the text under the icon. Not all codes are listed — common
+     * ones are translated; rarer thunder/sleet variants fall back to
+     * the raw code (acceptable for screen readers).
+     */
+    weatherSymbols: {
+      clearsky_day: 'Klart, dag',
+      clearsky_night: 'Klart, natt',
+      clearsky_polartwilight: 'Klart, polartussmørke',
+      fair_day: 'Lettskyet, dag',
+      fair_night: 'Lettskyet, natt',
+      fair_polartwilight: 'Lettskyet, polartussmørke',
+      partlycloudy_day: 'Delvis skyet, dag',
+      partlycloudy_night: 'Delvis skyet, natt',
+      partlycloudy_polartwilight: 'Delvis skyet, polartussmørke',
+      cloudy: 'Skyet',
+      fog: 'Tåke',
+      lightrain: 'Lett regn',
+      rain: 'Regn',
+      heavyrain: 'Kraftig regn',
+      lightrainshowers_day: 'Lette regnbyger, dag',
+      lightrainshowers_night: 'Lette regnbyger, natt',
+      rainshowers_day: 'Regnbyger, dag',
+      rainshowers_night: 'Regnbyger, natt',
+      heavyrainshowers_day: 'Kraftige regnbyger, dag',
+      heavyrainshowers_night: 'Kraftige regnbyger, natt',
+      lightsleet: 'Lett sludd',
+      sleet: 'Sludd',
+      heavysleet: 'Kraftig sludd',
+      lightsnow: 'Lett snø',
+      snow: 'Snø',
+      heavysnow: 'Kraftig snø',
+      rainandthunder: 'Regn og torden',
+      snowandthunder: 'Snø og torden',
+    } as Record<string, string>,
   },
 
   alerts: {
@@ -213,7 +262,7 @@ export const nb = {
     kartverketAttribution: 'Tidevannsdata fra Kartverket / Se havnivå.',
     version: 'Versjon',
     reliabilityDisclaimer:
-      'Værvarsel er aldri 100 % nøyaktig. Bruk denne appen som beslutningsstøtte, ikke som eneste kilde til vurdering av sjø- og værforhold.',
+      'Værvarsel er aldri 100 % nøyaktig, og kartene som vises i appen er ikke godkjent for navigering til sjøs. Bruk denne appen som beslutningsstøtte, ikke som eneste kilde til vurdering av sjø- og værforhold. Bruk offisielle sjøkart for sikker ferdsel.',
   },
 
   tags: {
@@ -284,6 +333,9 @@ export const nb = {
       'Varseltillatelse ble avslått. Du kan slå den på i systeminnstillingene.',
     backgroundUnavailable:
       'Bakgrunnssjekk er ikke tilgjengelig på denne enheten. Bruk «Sjekk nå» manuelt.',
+    refreshFailedTitle: 'Klarte ikke å oppdatere',
+    refreshFailedBody:
+      'Noen av værkildene svarer ikke akkurat nå. Du ser fortsatt sist hentede data — sjekk at du har internett og prøv igjen.',
   },
 
   reasons: {

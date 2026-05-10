@@ -22,6 +22,11 @@ export function TextField({ label, value, onChange, placeholder, multiline, auto
         placeholderTextColor="#9AA3AC"
         multiline={multiline}
         autoCapitalize={autoCapitalize}
+        // Explicit dark text colour ensures readability on devices in
+        // dark mode — without this the system default colour can render
+        // text white-on-white on the white input background.
+        underlineColorAndroid="transparent"
+        keyboardAppearance="default"
       />
     </View>
   );
@@ -38,6 +43,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 15,
     backgroundColor: '#fff',
+    color: '#222',
   },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
 });
