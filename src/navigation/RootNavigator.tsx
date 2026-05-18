@@ -19,7 +19,14 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { strings } from '../i18n';
 
 export type SpotsStackParamList = {
-  SpotsList: undefined;
+  /**
+   * `focusSpot` is a "jump to this spot on the map" signal. When set,
+   * SpotsListScreen forces its view mode to 'map' on the next focus,
+   * then clears the param. Source: the "Vis på kart" button on the
+   * forecast view. The actual map centre + zoom is conveyed via
+   * `rememberedMapState` (already updated by the caller).
+   */
+  SpotsList: { focusSpot?: string } | undefined;
   SpotForm: { spotId?: string; pickedLat?: number; pickedLon?: number };
   SpotForecast: { spotId: string };
   SpotMapPicker: { initialLat?: number; initialLon?: number };

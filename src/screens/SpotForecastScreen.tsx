@@ -19,6 +19,8 @@ import {
   FRESH_ON_ENTRY_MS,
   PartialFetchError,
 } from '../api/forecastService';
+import { getJumpZoom } from '../data/settingsRepository';
+import { rememberedMapState } from '../components/maps/mapState';
 import type { ForecastBundle } from '../domain/forecastTypes';
 import type { Spot } from '../domain/alertTypes';
 import { ForecastRow } from '../components/ForecastRow';
@@ -117,6 +119,25 @@ export function SpotForecastScreen() {
     });
   }, [nav, spot, s.common.edit]);
 
+  // "Vis på kart" — jumps back to SpotsList in map mode, centred on the
+  // spot at the user's preferred zoom. Updates rememberedMapState BEFORE
+  // popping so the MapWebView's initial render lands at the right view.
+  // The `focusSpot` route param tells SpotsList to switch its `view`
+  // state to 'map' regardless of what it was before.
+  //
+  // Defined as a hook here (before the early-return guards below) so the
+  // hook count is stable across renders — Rules of Hooks.
+  const onShowOnMap = useCallback(async () => {
+    if (!spot) return;
+    const zoom = await getJumpZoom();
+    rememberedMapState.update({
+      lat: spot.latitude,
+      lon: spot.longitude,
+      zoom,
+    });
+    nav.popTo('SpotsList', { focusSpot: spot.id }, { merge: true });
+  }, [spot, nav]);
+
   if (loading && !bundle) {
     return (
       <View style={styles.center}>
@@ -205,6 +226,13 @@ export function SpotForecastScreen() {
         <Text style={view === 'chart' ? styles.toggleTextActive : styles.toggleText}>
           {s.forecast.viewChart}
         </Text>
+      </Pressable>
+      {/* "Vis på kart" is an action, not a view-mode toggle — tapping it
+          navigates away rather than switching this screen's content. We
+          render it in the same chip style for visual consistency but it
+          never enters the "active" state. */}
+      <Pressable onPress={onShowOnMap} style={styles.toggle}>
+        <Text style={styles.toggleText}>{s.forecast.viewOnMap}</Text>
       </Pressable>
     </View>
   );

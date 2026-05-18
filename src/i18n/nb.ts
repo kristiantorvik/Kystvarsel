@@ -73,6 +73,7 @@ export const nb = {
     refresh: 'Oppdater',
     viewList: 'Tabell',
     viewChart: 'Graf',
+    viewOnMap: 'Vis på kart',
     columns: {
       time: 'Tid',
       airTemp: 'Luft',
@@ -253,6 +254,10 @@ export const nb = {
     showCrosshairLabel: 'Vis siktekors på kart',
     showCrosshairBody:
       'Tegner et lite siktekors midt på kartet. Praktisk når du vil peke på et sted uten å dekke det med fingeren.',
+    jumpZoomLabel: 'Zoom-nivå ved hopp til sted',
+    jumpZoomBody:
+      'Hvor langt kartet zoomer inn når du trykker «Vis på kart» fra et sted. 8 viser et stort område, 18 er maks zoom. 14 er et godt utgangspunkt for kystområder.',
+    jumpZoomField: 'Zoom (8–18)',
     notificationPermission: 'Varseltillatelse',
     notificationPermissionGranted: 'Tillatt',
     notificationPermissionDenied: 'Avslått',

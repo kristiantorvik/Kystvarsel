@@ -26,6 +26,11 @@ import {
   DEFAULT_DAILY_CHECK_HOUR,
   getShowCrosshair,
   setShowCrosshair,
+  getJumpZoom,
+  setJumpZoom,
+  DEFAULT_JUMP_ZOOM,
+  MIN_JUMP_ZOOM,
+  MAX_JUMP_ZOOM,
 } from '../data/settingsRepository';
 import {
   applyImport,
@@ -49,12 +54,14 @@ export function SettingsScreen() {
   // parses to a valid in-range hour.
   const [dailyHour, setDailyHour] = useState<number | undefined>(DEFAULT_DAILY_CHECK_HOUR);
   const [crosshairOn, setCrosshairOn] = useState(false);
+  const [jumpZoom, setJumpZoomState] = useState<number | undefined>(DEFAULT_JUMP_ZOOM);
 
   const refresh = useCallback(async () => {
     setPermission(await getNotificationPermissionState());
     setLastCheck(await settingsRepository.get(SETTINGS_KEYS.lastCheckAt));
     setDailyHour(await getDailyCheckHour());
     setCrosshairOn(await getShowCrosshair());
+    setJumpZoomState(await getJumpZoom());
   }, []);
 
   const onToggleCrosshair = useCallback(async (next: boolean) => {
@@ -64,6 +71,12 @@ export function SettingsScreen() {
     // crosshair will reflect this change.
     setCrosshairOn(next);
     await setShowCrosshair(next);
+  }, []);
+
+  const onJumpZoomChange = useCallback(async (v: number | undefined) => {
+    setJumpZoomState(v);
+    if (v == null || !Number.isFinite(v) || v < MIN_JUMP_ZOOM || v > MAX_JUMP_ZOOM) return;
+    await setJumpZoom(v);
   }, []);
 
   const onDailyHourChange = useCallback(async (v: number | undefined) => {
@@ -272,6 +285,20 @@ export function SettingsScreen() {
           <Text style={styles.body}>{s.settings.showCrosshairBody}</Text>
         </View>
         <Switch value={crosshairOn} onValueChange={onToggleCrosshair} />
+      </View>
+
+      <Text style={styles.label}>{s.settings.jumpZoomLabel}</Text>
+      <Text style={styles.body}>{s.settings.jumpZoomBody}</Text>
+      <View style={styles.timeRow}>
+        <View style={styles.timeField}>
+          <NumberField
+            label={s.settings.jumpZoomField}
+            value={jumpZoom}
+            onChange={onJumpZoomChange}
+            step="integer"
+            placeholder={`${MIN_JUMP_ZOOM}–${MAX_JUMP_ZOOM}`}
+          />
+        </View>
       </View>
 
       <Text style={styles.h2}>{s.settings.notificationPermission}</Text>

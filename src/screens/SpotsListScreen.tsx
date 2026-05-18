@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert as RNAlert,
   FlatList,
@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { spotsRepository } from '../data/spotsRepository';
@@ -37,6 +37,7 @@ import { strings } from '../i18n';
 import type { SpotsStackParamList } from '../navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<SpotsStackParamList, 'SpotsList'>;
+type Rt = RouteProp<SpotsStackParamList, 'SpotsList'>;
 type ViewMode = 'list' | 'map' | 'tags' | 'layers';
 
 interface LayerRowState extends MapLayer {
@@ -45,6 +46,7 @@ interface LayerRowState extends MapLayer {
 
 export function SpotsListScreen() {
   const nav = useNavigation<Nav>();
+  const route = useRoute<Rt>();
   const s = strings();
   const showCrosshair = useShowCrosshair();
 
@@ -125,6 +127,18 @@ export function SpotsListScreen() {
       };
     }, [reload]),
   );
+
+  // "Vis på kart" signal from SpotForecastScreen: when `focusSpot` is set
+  // in the route params, force the view to map and clear the param so
+  // re-renders / focus refreshes don't keep applying it. The caller has
+  // already updated rememberedMapState with the target spot's lat/lon +
+  // jump-zoom, so the MapWebView will mount centred on the right spot.
+  const focusSpot = route.params?.focusSpot;
+  useEffect(() => {
+    if (!focusSpot) return;
+    setView('map');
+    nav.setParams({ focusSpot: undefined });
+  }, [focusSpot, nav]);
 
   const onCheckNow = async () => {
     setChecking(true);

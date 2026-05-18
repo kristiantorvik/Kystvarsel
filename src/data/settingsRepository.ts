@@ -36,6 +36,12 @@ export const SETTINGS_KEYS = {
    * under the crosshair instead of covering it with their finger.
    */
   showCrosshair: 'showCrosshair',
+  /**
+   * Default Leaflet zoom level used when "jumping" to a spot from the
+   * forecast view's "Vis på kart" button. Stored as a string integer
+   * in the range 8..18 (matches Kartverket WMTS maxZoom of 18).
+   */
+  jumpZoomLevel: 'jumpZoomLevel',
 } as const;
 
 /** Default check time if the user hasn't set one — 07:00 local. */
@@ -69,4 +75,34 @@ export async function getShowCrosshair(): Promise<boolean> {
 
 export async function setShowCrosshair(on: boolean): Promise<void> {
   await settingsRepository.set(SETTINGS_KEYS.showCrosshair, on ? '1' : '0');
+}
+
+/**
+ * Default zoom level when jumping to a spot on the map from the
+ * forecast view. 14 fits a coastal area nicely on a phone — close
+ * enough to see local geography (islands, harbours) but not so tight
+ * the user immediately loses context. Clamped to [8, 18]; Kartverket's
+ * WMTS caches have maxZoom 18, anything below 8 makes the spot dot
+ * vanish in the continent view.
+ */
+export const DEFAULT_JUMP_ZOOM = 14;
+export const MIN_JUMP_ZOOM = 8;
+export const MAX_JUMP_ZOOM = 18;
+
+function clampJumpZoom(n: number): number {
+  if (!Number.isFinite(n)) return DEFAULT_JUMP_ZOOM;
+  return Math.max(MIN_JUMP_ZOOM, Math.min(MAX_JUMP_ZOOM, Math.floor(n)));
+}
+
+export async function getJumpZoom(): Promise<number> {
+  const raw = await settingsRepository.get(SETTINGS_KEYS.jumpZoomLevel);
+  if (raw == null) return DEFAULT_JUMP_ZOOM;
+  return clampJumpZoom(parseInt(raw, 10));
+}
+
+export async function setJumpZoom(zoom: number): Promise<void> {
+  await settingsRepository.set(
+    SETTINGS_KEYS.jumpZoomLevel,
+    String(clampJumpZoom(zoom)),
+  );
 }
