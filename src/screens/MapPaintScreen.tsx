@@ -20,6 +20,7 @@ import {
 } from '../components/maps/MapWebView';
 import type { LeafletLayer, PaintLayerData, PaintTool } from '../components/maps/leafletHtml';
 import { rememberedMapState } from '../components/maps/mapState';
+import { useShowCrosshair } from '../hooks/useShowCrosshair';
 import { ErrorState } from '../components/ErrorState';
 import { strings } from '../i18n';
 import type { SpotsStackParamList } from '../navigation/RootNavigator';
@@ -76,6 +77,7 @@ export function MapPaintScreen() {
   const s = strings();
   const { layerId } = route.params;
   const { width, height } = useWindowDimensions();
+  const showCrosshair = useShowCrosshair();
 
   const [editing, setEditing] = useState<LayerWithSplats | null>(null);
   const [otherLayers, setOtherLayers] = useState<LayerWithSplats[]>([]);
@@ -342,6 +344,7 @@ export function MapPaintScreen() {
         editingLayerId={editing.layer.id}
         tool={tool}
         brushScreenPx={brushScreenPx}
+        showCrosshair={showCrosshair}
         onPaintBatch={onPaintBatch}
         onEraseBatch={onEraseBatch}
       />

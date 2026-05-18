@@ -249,6 +249,10 @@ export const nb = {
     dailyCheckBody:
       'Velg på hvilken time Kystvarsel skal hente værvarsel og sende varsler. Sjekken kjøres maks én gang per døgn, så snart telefonen har anledning innen 30 minutter før eller når som helst etter dette tidspunktet.',
     dailyCheckHour: 'Time (0–23)',
+    mapSection: 'Kart',
+    showCrosshairLabel: 'Vis siktekors på kart',
+    showCrosshairBody:
+      'Tegner et lite siktekors midt på kartet. Praktisk når du vil peke på et sted uten å dekke det med fingeren.',
     notificationPermission: 'Varseltillatelse',
     notificationPermissionGranted: 'Tillatt',
     notificationPermissionDenied: 'Avslått',

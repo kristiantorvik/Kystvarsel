@@ -11,6 +11,7 @@ import { strings } from '../i18n';
 import { fmtCoord } from '../utils/format';
 import type { LeafletLayer, PaintLayerData } from '../components/maps/leafletHtml';
 import { rememberedMapState } from '../components/maps/mapState';
+import { useShowCrosshair } from '../hooks/useShowCrosshair';
 import type { SpotsStackParamList } from '../navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<SpotsStackParamList, 'SpotMapPicker'>;
@@ -23,6 +24,7 @@ export function SpotMapPickerScreen() {
 
   const initialLat = route.params?.initialLat;
   const initialLon = route.params?.initialLon;
+  const showCrosshair = useShowCrosshair();
 
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
     initialLat != null && initialLon != null
@@ -82,6 +84,7 @@ export function SpotMapPickerScreen() {
         initialZoom={initialLat != null ? undefined : rememberedMapState.get().zoom}
         picked={picked ?? undefined}
         layers={paintLayers}
+        showCrosshair={showCrosshair}
         onPick={setPicked}
       />
 

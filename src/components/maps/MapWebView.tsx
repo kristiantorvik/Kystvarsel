@@ -94,6 +94,17 @@ export function MapWebView(props: Props) {
     );
   }, [paintTool, props.mode]);
 
+  // Crosshair toggle pushed in place. The initial HTML respects the
+  // value via INIT.showCrosshair, but if the user changes the setting
+  // while a map screen is mounted, this effect catches it and pokes
+  // the DOM directly without remounting (which would lose pan/zoom).
+  const showCrosshair = props.showCrosshair === true;
+  useEffect(() => {
+    ref.current?.injectJavaScript(
+      `try { if (window.setCrosshair) setCrosshair(${showCrosshair}); } catch(e) {} true;`,
+    );
+  }, [showCrosshair]);
+
   const onMessage = (event: WebViewMessageEvent) => {
     let parsed: any;
     try {

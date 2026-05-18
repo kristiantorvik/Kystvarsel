@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert as RNAlert, Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert as RNAlert, Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -24,6 +24,8 @@ import {
   getDailyCheckHour,
   setDailyCheckHour,
   DEFAULT_DAILY_CHECK_HOUR,
+  getShowCrosshair,
+  setShowCrosshair,
 } from '../data/settingsRepository';
 import {
   applyImport,
@@ -46,11 +48,22 @@ export function SettingsScreen() {
   // the field is empty mid-edit; we only push to storage when the value
   // parses to a valid in-range hour.
   const [dailyHour, setDailyHour] = useState<number | undefined>(DEFAULT_DAILY_CHECK_HOUR);
+  const [crosshairOn, setCrosshairOn] = useState(false);
 
   const refresh = useCallback(async () => {
     setPermission(await getNotificationPermissionState());
     setLastCheck(await settingsRepository.get(SETTINGS_KEYS.lastCheckAt));
     setDailyHour(await getDailyCheckHour());
+    setCrosshairOn(await getShowCrosshair());
+  }, []);
+
+  const onToggleCrosshair = useCallback(async (next: boolean) => {
+    // Optimistic update so the Switch flips immediately; persist in
+    // the background. The map screens re-read the value on focus via
+    // useShowCrosshair, so the next time the user opens a map the
+    // crosshair will reflect this change.
+    setCrosshairOn(next);
+    await setShowCrosshair(next);
   }, []);
 
   const onDailyHourChange = useCallback(async (v: number | undefined) => {
@@ -252,6 +265,15 @@ export function SettingsScreen() {
       </Text>
       <PrimaryButton title={s.settings.runCheckNow} onPress={onCheckNow} loading={running} style={{ marginTop: 12 }} />
 
+      <Text style={styles.h2}>{s.settings.mapSection}</Text>
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleText}>
+          <Text style={styles.toggleLabel}>{s.settings.showCrosshairLabel}</Text>
+          <Text style={styles.body}>{s.settings.showCrosshairBody}</Text>
+        </View>
+        <Switch value={crosshairOn} onValueChange={onToggleCrosshair} />
+      </View>
+
       <Text style={styles.h2}>{s.settings.notificationPermission}</Text>
       <Text style={styles.body}>{permLabel}</Text>
       {permission !== 'granted' && (
@@ -325,4 +347,12 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: '#0E3A5F', marginTop: 16, marginBottom: 4 },
   timeRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
   timeField: { flex: 1 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  toggleText: { flex: 1 },
+  toggleLabel: { fontSize: 14, fontWeight: '600', color: '#0E3A5F', marginBottom: 2 },
 });

@@ -30,6 +30,7 @@ import {
   type SpotFilterState,
 } from '../components/spotFilterState';
 import { TagChipRow, type TagChipItem } from '../components/TagChipRow';
+import { useShowCrosshair } from '../hooks/useShowCrosshair';
 import { runAlertCheck } from '../notifications/backgroundCheck';
 import { fmtCoord } from '../utils/format';
 import { strings } from '../i18n';
@@ -45,6 +46,7 @@ interface LayerRowState extends MapLayer {
 export function SpotsListScreen() {
   const nav = useNavigation<Nav>();
   const s = strings();
+  const showCrosshair = useShowCrosshair();
 
   const [spots, setSpots] = useState<Spot[]>([]);
   const [markers, setMarkers] = useState<SpotMarker[]>([]);
@@ -290,6 +292,7 @@ export function SpotsListScreen() {
         initialZoom={rememberedMapState.get().zoom}
         spots={filteredMarkers}
         layers={paintLayers}
+        showCrosshair={showCrosshair}
         legendLabels={{
           matching: s.spots.mapLegendMatching,
           alert: s.spots.mapLegendAlert,

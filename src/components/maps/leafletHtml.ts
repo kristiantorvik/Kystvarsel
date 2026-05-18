@@ -55,6 +55,13 @@ interface BaseOptions {
   initialZoom?: number;
   /** Read-only painted layers shown beneath the rest of the UI. */
   layers?: PaintLayerData[];
+  /**
+   * Show a stationary crosshair at the centre of the map. User setting,
+   * applies to every map view. Toggled in place at runtime via
+   * `window.setCrosshair(boolean)` so a setting change doesn't require
+   * a WebView remount (preserving pan/zoom state).
+   */
+  showCrosshair?: boolean;
 }
 
 export interface PickOptions extends BaseOptions {
@@ -176,6 +183,19 @@ const TEMPLATE = `<!DOCTYPE html>
     margin-top: 10px; border: none; background: #0E3A5F; color: #fff;
     padding: 8px 14px; border-radius: 6px; font-weight: 600; cursor: pointer;
   }
+
+  /* Stationary crosshair at the centre of the map. Controlled by a user
+     setting; toggled in place via window.setCrosshair(). pointer-events
+     stays 'none' so the SVG doesn't intercept taps meant for the map. */
+  .map-crosshair {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px; height: 32px;
+    z-index: 1100;
+    pointer-events: none;
+    display: none;
+  }
+  .map-crosshair.show { display: block; }
 </style>
 </head>
 <body>
@@ -190,6 +210,24 @@ const TEMPLATE = `<!DOCTYPE html>
   <h4>Flyfoto kommer snart</h4>
   <p style="margin:0;">Vi jobber med å gjøre Kartverkets «Norge i bilder» tilgjengelig direkte i appen. Det er ikke klart i denne versjonen, men kommer i en oppdatering.</p>
   <button id="flyfoto-info-close">OK</button>
+</div>
+<!-- Stationary crosshair (hidden by default; .show toggles visibility via JS). -->
+<div class="map-crosshair" id="map-crosshair" aria-hidden="true">
+  <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+    <g stroke="#fff" stroke-width="3.5" stroke-linecap="round" opacity="0.95">
+      <line x1="16" y1="2" x2="16" y2="11"/>
+      <line x1="16" y1="21" x2="16" y2="30"/>
+      <line x1="2" y1="16" x2="11" y2="16"/>
+      <line x1="21" y1="16" x2="30" y2="16"/>
+    </g>
+    <g stroke="#0E3A5F" stroke-width="1.5" stroke-linecap="round">
+      <line x1="16" y1="2" x2="16" y2="11"/>
+      <line x1="16" y1="21" x2="16" y2="30"/>
+      <line x1="2" y1="16" x2="11" y2="16"/>
+      <line x1="21" y1="16" x2="30" y2="16"/>
+    </g>
+    <circle cx="16" cy="16" r="1.5" fill="#0E3A5F"/>
+  </svg>
 </div>
 __LEGEND__
 <script type="application/json" id="init-data">__INIT_DATA__</script>
@@ -548,12 +586,33 @@ __LEGEND__
   }
 
   if (INIT.mode === 'pick') {
+    // Custom pin icon. Leaflet's default L.marker() pulls marker-icon.png
+    // and marker-shadow.png via relative URLs — since our WebView HTML
+    // is injected as a string with no base URL, those resolve to nothing
+    // and the user sees a generic broken-image glyph. Using an inline
+    // SVG via L.divIcon sidesteps the asset problem entirely AND lets
+    // us anchor the pin's tip exactly on the picked coordinate.
+    var PICK_ICON_SVG =
+      '<svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg" style="display:block;">' +
+        '<path d="M15 1 C7.27 1 1 7.27 1 15 c0 11 14 26 14 26 s14-15 14-26 C29 7.27 22.73 1 15 1 z" ' +
+          'fill="#D8281A" stroke="#fff" stroke-width="2"/>' +
+        '<circle cx="15" cy="15" r="5" fill="#fff"/>' +
+      '</svg>';
+    var pickIcon = L.divIcon({
+      className: 'pick-pin-icon',
+      html: PICK_ICON_SVG,
+      iconSize: [30, 42],
+      // Anchor at the tip (bottom centre) so the pin "points at" the
+      // lat/lon rather than centring on it.
+      iconAnchor: [15, 41],
+    });
+
     var marker = null;
     function placeMarker(lat, lon) {
       if (marker) {
         marker.setLatLng([lat, lon]);
       } else {
-        marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+        marker = L.marker([lat, lon], { icon: pickIcon, draggable: true }).addTo(map);
         marker.on('dragend', function(e) {
           var p = e.target.getLatLng();
           post({ type: 'pick', lat: p.lat, lon: p.lng });
@@ -741,6 +800,19 @@ __LEGEND__
   window.updatePaintLayers = function(list) {
     syncPaintLayers(list, INIT.mode === 'paint' ? INIT.editingLayerId : null);
   };
+
+  // Toggle the centre crosshair without rebuilding the WebView. Called
+  // imperatively from RN via injectJavaScript whenever the underlying
+  // setting changes, plus once at startup to honour the initial value.
+  var crosshairEl = document.getElementById('map-crosshair');
+  window.setCrosshair = function(on) {
+    if (!crosshairEl) return;
+    if (on) crosshairEl.classList.add('show');
+    else crosshairEl.classList.remove('show');
+  };
+  // Apply the initial value from INIT (if RN pre-seeded it before the
+  // first injectJavaScript call lands).
+  if (INIT.showCrosshair) window.setCrosshair(true);
 })();
 </script>
 </body>

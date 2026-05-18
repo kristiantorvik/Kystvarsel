@@ -29,6 +29,13 @@ export const SETTINGS_KEYS = {
    * to be meaningful, and a single-field UI is friendlier.
    */
   dailyCheckHour: 'dailyCheckHour',
+  /**
+   * Whether to render a stationary crosshair at the centre of every map
+   * view. Stored as '1' / '0'. Useful when pointing at something on a
+   * small phone screen — the user can move the map so the target sits
+   * under the crosshair instead of covering it with their finger.
+   */
+  showCrosshair: 'showCrosshair',
 } as const;
 
 /** Default check time if the user hasn't set one — 07:00 local. */
@@ -52,4 +59,14 @@ export async function getDailyCheckHour(): Promise<number> {
 
 export async function setDailyCheckHour(hour: number): Promise<void> {
   await settingsRepository.set(SETTINGS_KEYS.dailyCheckHour, String(clampHour(hour)));
+}
+
+/** Crosshair visible at the centre of every map view. Defaults to off. */
+export async function getShowCrosshair(): Promise<boolean> {
+  const raw = await settingsRepository.get(SETTINGS_KEYS.showCrosshair);
+  return raw === '1';
+}
+
+export async function setShowCrosshair(on: boolean): Promise<void> {
+  await settingsRepository.set(SETTINGS_KEYS.showCrosshair, on ? '1' : '0');
 }
